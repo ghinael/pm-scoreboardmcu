@@ -21,8 +21,18 @@ function parseCSV(text) {
     out.push(cur); return out;
   });
 }
-function num(v){ let s=String(v).replace(/%/g,"").replace(/[^0-9.\-]/g,""); const n=parseFloat(s); return isNaN(n)?0:n; }
-function pctNum(v){ let s=String(v).trim(); if(s.includes("%")){ return num(s)/100; } return num(s); }
+function num(v){
+  let s = String(v).trim().replace(/%/g,"");
+  s = s.replace(/\./g,"").replace(/,/g,".");   // titik=ribuan dihapus, koma=desimal jadi titik
+  s = s.replace(/[^0-9.\-]/g,"");
+  const n = parseFloat(s);
+  return isNaN(n)?0:n;
+}
+function pctNum(v){
+  const hasPct = String(v).includes("%");
+  const n = num(v);
+  return hasPct ? n/100 : n;
+}
 function findSection(rows, label) {
   const idx = rows.findIndex(r => (r[0]||"").trim() === label);
   if (idx === -1) return [];
