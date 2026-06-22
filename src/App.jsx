@@ -516,7 +516,7 @@ function CashoutEfisiensi({ rows }) {
 function KomitmenUrgent({ rows }) {
   const filtered = (rows || []).filter((c) => /urgent/i.test(c.Status || ""));
   return (
-    <Section letter="E" title="Komitmen Urgent" caption="Yang harus dieksekusi paling dulu">
+    <Section letter="G" title="Komitmen Urgent" caption="Yang harus dieksekusi paling dulu">
       <div className="pm-urgent">
         {filtered.length === 0 && <div className="pm-empty">Tidak ada komitmen urgent. 🎉</div>}
         {filtered.map((c, i) => (
