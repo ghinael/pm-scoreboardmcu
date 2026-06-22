@@ -1,1105 +1,1018 @@
 import React, { useState, useEffect, useMemo } from "react";
 
-// ─────────────────────────────────────────────────────────────
-// CONFIG — paste URL publish-to-web CSV tab 90_EXPORT_DASHBOARD
-// ─────────────────────────────────────────────────────────────
-const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSxeXQjctXiL9WBqxDHgb4GtMIcUgw2OkoD6xZFwkrfLhvUMAA-hUPTP5D8mrqMjNwAmowpkfzmtk19/pub?gid=1965086356&single=true&output=csv";
-const FOTO_PM = "https://drive.google.com/thumbnail?id=1hHXUbp27jvg9fK05zYIlMneHAs1zAf7M&sz=w1600";
+/* =====================================================================
+   KONFIGURASI
+   ===================================================================== */
 
-// ─────────────────────────────────────────────────────────────
-// DESIGN TOKENS
-// ─────────────────────────────────────────────────────────────
-const C = {
-  bg: "#f0f2f5", white: "#ffffff", navy: "#16335c", navy2: "#1f4576",
-  ink: "#1a1a2e", muted: "#6b7280", border: "#e5e7eb", light: "#f9fafb",
-  green: "#10b981", greenBg: "#d1fae5", greenTxt: "#065f46",
-  red: "#ef4444", redBg: "#fee2e2", redTxt: "#991b1b",
-  orange: "#f59e0b", orangeBg: "#fef3c7", orangeTxt: "#92400e",
-  blue: "#3b82f6", blueBg: "#dbeafe",
-  teal: "#0d9488",
-};
-const PROG = {
-  DBE: "#2563eb", MMBA: "#7c3aed", SIC: "#0891b2",
-  DBS: "#ea580c", Brevet: "#16a34a", CCC: "#94a3b8",
-};
-const PROG_BG = {
-  DBE: "#dbeafe", MMBA: "#ede9fe", SIC: "#cffafe",
-  DBS: "#ffedd5", Brevet: "#dcfce7", CCC: "#f1f5f9",
-};
+// URL CSV publish dari tab 90_EXPORT_DASHBOARD.
+// HARUS format publish-to-web: .../pub?...&output=csv
+// BUKAN URL edit (.../edit?gid=...). Cara dapat: File → Bagikan → Publish ke web → pilih tab 90 → format CSV.
+const CSV_URL =
+  "https://docs.google.com/spreadsheets/d/e/2PACX-1vSxeXQjctXiL9WBqxDHgb4GtMIcUgw2OkoD6xZFwkrfLhvUMAA-hUPTP5D8mrqMjNwAmowpkfzmtk19/pub?gid=1965086356&single=true&output=csv";
 
-// ─────────────────────────────────────────────────────────────
-// CSV PARSING
-// ─────────────────────────────────────────────────────────────
+const HERO_IMAGE =
+  "https://drive.google.com/thumbnail?id=1hHXUbp27jvg9fK05zYIlMneHAs1zAf7M&sz=w1600";
+
+const PROGRAM_META = {
+  DBE:    { color: "#2D6CDF", avatar: "https://drive.google.com/thumbnail?id=1MywpZ8s01M24c47m-jxeAHXqqhwtXCha&sz=w400" },
+  MMBA:   { color: "#E8A317", avatar: "https://drive.google.com/thumbnail?id=1iSw_kPDCJSxWNLlYTfN25yrjc_azJVzX&sz=w400" },
+  SIC:    { color: "#0E9F8E", avatar: "https://drive.google.com/thumbnail?id=183tPBw1vjeCzfeOICJ6RuwDyyh0q9jS7&sz=w400" },
+  DBS:    { color: "#8B5CF6", avatar: "https://drive.google.com/thumbnail?id=12yZvrjALqe2hhV3y7n94je6eyjhQkKXg&sz=w400" },
+  Brevet: { color: "#E5484D", avatar: "https://drive.google.com/thumbnail?id=1-hyWkWmrERA4cGR2p-yL67Gdr2Xz7C2U&sz=w400" },
+  CCC:    { color: "#64748B", avatar: "" },
+};
+const metaOf = (p) => PROGRAM_META[p] || { color: "#94A3B8", avatar: "" };
+
+/* =====================================================================
+   HELPERS
+   ===================================================================== */
+
 function parseCSV(text) {
-  return text.split(/\r?\n/).map(r => {
-    const out = []; let cur = ""; let q = false;
-    for (let i = 0; i < r.length; i++) {
-      const ch = r[i];
-      if (ch === '"') { q = !q; continue; }
-      if (ch === ',' && !q) { out.push(cur.trim()); cur = ""; continue; }
-      cur += ch;
+  const rows = [];
+  let row = [], cell = "", q = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) {
+      if (c === '"') {
+        if (text[i + 1] === '"') { cell += '"'; i++; }
+        else q = false;
+      } else cell += c;
+    } else {
+      if (c === '"') q = true;
+      else if (c === ",") { row.push(cell); cell = ""; }
+      else if (c === "\n") { row.push(cell); rows.push(row); row = []; cell = ""; }
+      else if (c === "\r") { /* skip */ }
+      else cell += c;
     }
-    out.push(cur.trim());
-    return out;
-  });
+  }
+  if (cell.length || row.length) { row.push(cell); rows.push(row); }
+  return rows;
 }
 
 function num(v) {
-  if (v === null || v === undefined || v === "" || v === "—") return 0;
-  let s = String(v).replace(/\s/g, "").replace(/%/g, "");
-  s = s.replace(/\./g, "").replace(",", "."); // ID locale: 1.000.000,5 → 1000000.5
-  const n = parseFloat(s);
+  if (v == null || v === "") return 0;
+  const s = String(v).trim().replace(/[^0-9.,-]/g, "");
+  let clean = s;
+  if (s.includes(",") && s.includes(".")) clean = s.replace(/\./g, "").replace(",", ".");
+  else if (s.includes(",") && !s.includes(".")) clean = s.replace(",", ".");
+  const n = parseFloat(clean);
   return isNaN(n) ? 0 : n;
 }
 
-function pct(v) {
-  if (v === null || v === undefined || v === "" || v === "—") return 0;
-  let s = String(v).trim();
-  if (s.includes("%")) {
-    let n = num(s);
-    return Math.abs(n) > 1.5 ? n / 100 : n;
-  }
-  let n = num(s);
-  return Math.abs(n) > 1.5 ? n / 100 : n;
+// Persen pintar: kalau angka <=1.5, anggap desimal (0.33 -> 33%). Kalau >1.5, anggap sudah dalam persen (3.3 -> 3%).
+function pct(x) {
+  const n = num(x);
+  const v = Math.abs(n) <= 1.5 ? n * 100 : n;
+  return `${Math.round(v)}%`;
+}
+const rupiah = (x) => "Rp " + Math.round(num(x)).toLocaleString("id-ID");
+const truthy = (v) => /^(true|ya|yes|1|done|selesai)$/i.test(String(v).trim());
+
+// Section name -> nama bucket di state. Pakai alias karena nama section kadang ke-truncate di Sheets.
+const SECTION_KEY = {
+  PERFORMA_TIM: "performaTim",
+  PAPAN_PERFORMA: "papan",
+  KALDIK_EVENTS: "kaldik",
+  CASHFLOW_BULAN: "cashflow",
+  TOP_COMMITMENT: "commitment",
+  PESERTA_AKTIF_RINGKASAN: "pesertaAktif",
+  PESERTA_AKTIF_RINGKAS: "pesertaAktif",
+  PESERTA_AKTIF_RINGKA: "pesertaAktif",
+  PESERTA_AKTIF: "pesertaAktif",
+  WEEKLY_LEADER: "weekly",
+  PERFORMANCE_APPRAISAL: "appraisal",
+};
+
+// Section header = string ALL_CAPS_UNDERSCORE di kolom A, semua kolom lain kosong.
+function isSectionHeader(rowVals) {
+  const a = (rowVals[0] || "").trim();
+  if (!a) return false;
+  if (!/^[A-Z][A-Z0-9_]+$/.test(a)) return false;
+  return rowVals.slice(1).every((x) => !x || !String(x).trim());
 }
 
-function rp(v) {
-  const n = num(v);
-  if (n === 0) return "Rp 0";
-  if (Math.abs(n) >= 1e9) return `Rp ${(n / 1e9).toFixed(1)}M`;
-  if (Math.abs(n) >= 1e6) return `Rp ${(n / 1e6).toFixed(0)}jt`;
-  if (Math.abs(n) >= 1e3) return `Rp ${(n / 1e3).toFixed(0)}rb`;
-  return `Rp ${n.toLocaleString("id-ID")}`;
-}
+function shapeData(rows) {
+  const meta = {};
+  const buckets = {};
+  let section = null, sub = null;
 
-function fmtPct(v) {
-  const p = typeof v === "number" ? v : pct(v);
-  if (p === 0) return "0%";
-  return `${(p * 100).toFixed(0)}%`;
-}
-
-const SECTIONS = [
-  "Header", "PERFORMA_TIM", "PAPAN_PERFORMA", "KALDIK_EVENTS",
-  "CASHFLOW_BULAN", "TOP_COMMITMENT", "PESERTA_AKTIF_RINGKAS",
-  "FOTO_TIM", "WEEKLY_LEADER", "PERFORMANCE_APPRAISAL",
-];
-
-function findSection(rows, label) {
-  const idx = rows.findIndex(r => {
-    const v = (r[0] || "").trim();
-    return v === label || v.startsWith(label);
-  });
-  if (idx === -1) return [];
-  const out = [];
-  for (let i = idx + 2; i < rows.length; i++) {
-    const r = rows[i] || [];
-    const first = (r[0] || "").trim();
-    if (SECTIONS.some(s => first === s || first.startsWith(s))) break;
-    if (r.every(c => !c || c.trim() === "")) break;
-    out.push(r);
-  }
-  return out;
-}
-
-// ─────────────────────────────────────────────────────────────
-// DATA BUILDER
-// ─────────────────────────────────────────────────────────────
-function buildData(text) {
-  const rows = parseCSV(text);
-
-  // Header
-  const hdr = {};
-  rows.filter(r => (r[0] || "").trim() === "Header").forEach(r => {
-    hdr[(r[1] || "").trim()] = (r[2] || "").trim();
-  });
-
-  // PERFORMA_TIM — now 14 cols: Program,LeadsT,LeadsR,IntT,IntR,DUT,DUR,UjianT,UjianR,BiayaT,BiayaR,SIS,Rapot,Kaldik
-  const perfRaw = findSection(rows, "PERFORMA_TIM");
-  const perf = perfRaw.filter(r => r[0] && r[0] !== "CCC").map(r => {
-    const lt = num(r[1]), lr = num(r[2]);
-    const it = num(r[3]), ir = num(r[4]);
-    const dut = num(r[5]), dur = num(r[6]);
-    const ujt = num(r[7]), ujr = num(r[8]);
-    const bt = num(r[9]), br = num(r[10]);
-    const sis = pct(r[11]), rapot = pct(r[12]), kaldik = pct(r[13]);
-    return {
-      prog: r[0].trim(),
-      leadsT: lt, leadsR: lr, leadsPct: lt ? lr / lt : 0,
-      intT: it, intR: ir, intPct: it ? ir / it : 0,
-      duT: dut, duR: dur, duPct: dut ? dur / dut : 0,
-      ujianT: ujt, ujianR: ujr, ujianPct: ujt ? ujr / ujt : 0,
-      biayaT: bt, biayaR: br, biayaPct: bt ? br / bt : 0,
-      sis, rapot, kaldik,
-    };
-  });
-  // Also include CCC if it has data
-  const cccRow = perfRaw.find(r => (r[0]||"").trim() === "CCC");
-  if (cccRow) {
-    const hasData = cccRow.slice(1, 10).some(v => num(v) > 0);
-    if (hasData) {
-      const lt = num(cccRow[1]), lr = num(cccRow[2]);
-      const it = num(cccRow[3]), ir = num(cccRow[4]);
-      const dut = num(cccRow[5]), dur = num(cccRow[6]);
-      const ujt = num(cccRow[7]), ujr = num(cccRow[8]);
-      const bt = num(cccRow[9]), br = num(cccRow[10]);
-      perf.push({
-        prog: "CCC", leadsT: lt, leadsR: lr, leadsPct: lt ? lr / lt : 0,
-        intT: it, intR: ir, intPct: it ? ir / it : 0,
-        duT: dut, duR: dur, duPct: dut ? dur / dut : 0,
-        ujianT: ujt, ujianR: ujr, ujianPct: ujt ? ujr / ujt : 0,
-        biayaT: bt, biayaR: br, biayaPct: bt ? br / bt : 0,
-        sis: pct(cccRow[11]), rapot: pct(cccRow[12]), kaldik: pct(cccRow[13]),
-      });
+  for (const r of rows) {
+    if (isSectionHeader(r)) {
+      const a = r[0].trim();
+      const key = SECTION_KEY[a] || a.toLowerCase();
+      section = key;
+      sub = null;
+      buckets[key] = buckets[key] || [];
+      continue;
     }
+    const a = (r[0] || "").trim();
+    if (a === "Header") { meta[(r[1] || "").trim()] = (r[2] || "").trim(); continue; }
+    if (!section) continue;
+    if (!sub) {
+      sub = r.map((x) => (x || "").trim());
+      continue;
+    }
+    if (r.every((x) => !x || !String(x).trim())) continue;
+    const obj = {};
+    sub.forEach((key, idx) => { if (key) obj[key] = r[idx]; });
+    buckets[section].push(obj);
   }
 
-  // PAPAN_PERFORMA
-  const papanRaw = findSection(rows, "PAPAN_PERFORMA");
-  const papan = {};
-  papanRaw.forEach(r => {
-    const prog = (r[0] || "").trim();
-    const kpi = (r[1] || "").trim();
-    if (!prog || !kpi) return;
-    if (!papan[kpi]) papan[kpi] = {};
-    papan[kpi][prog] = {
-      W1: pct(r[2]), W2: pct(r[3]), W3: pct(r[4]), W4: pct(r[5]), W5: pct(r[6]),
-    };
-  });
-
-  // KALDIK_EVENTS
-  const kaldikRaw = findSection(rows, "KALDIK_EVENTS");
-  const kaldik = kaldikRaw
-    .filter(r => r[0] && r[1] && r[2])
-    .map(r => ({
-      day: num(r[0]),
-      prog: (r[1] || "").trim(),
-      title: (r[2] || "").trim(),
-      done: (r[3] || "").toLowerCase() === "true",
-    }));
-
-  // CASHFLOW
-  const cfRaw = findSection(rows, "CASHFLOW_BULAN");
-  const cashflow = { plan: 0, reality: 0 };
-  cfRaw.forEach(r => {
-    const k = (r[0] || "").trim().toLowerCase();
-    if (k === "plan") cashflow.plan = num(r[1]);
-    if (k === "reality") cashflow.reality = num(r[1]);
-  });
-
-  // TOP_COMMITMENT
-  const cmtRaw = findSection(rows, "TOP_COMMITMENT");
-  const commitments = cmtRaw
-    .filter(r => r[0] && /urgent/i.test(r[1] || ""))
-    .map(r => ({
-      title: (r[0] || "").trim(),
-      status: (r[1] || "").trim(),
-      deadline: (r[2] || "").trim(),
-    }));
-
-  // PESERTA_AKTIF
-  const paRaw = findSection(rows, "PESERTA_AKTIF_RINGKAS");
-  const peserta = paRaw.filter(r => r[0] && r[1]).map(r => ({
-    batch: (r[0] || "").trim(),
-    prog: (r[1] || "").trim(),
-    target: num(r[2]),
-    aktif: num(r[3]),
-    mundur: num(r[4]),
-    sudahBayar: num(r[5]),
-    belumBayar: num(r[6]),
-    bayarPct: pct(r[7]),
-  }));
-
-  // FOTO_TIM
-  const fotoRaw = findSection(rows, "FOTO_TIM");
-  const fotos = {};
-  fotoRaw.forEach(r => {
-    const p = (r[0] || "").trim().toUpperCase();
-    const u = (r[1] || "").trim();
-    if (p && u && !u.includes("#REF")) {
-      const mapped = p === "BREVET" ? "Brevet" : Object.keys(PROG).find(k => k.toUpperCase() === p) || p;
-      fotos[mapped] = u;
-    }
-  });
-
-  // PERFORMANCE_APPRAISAL
-  const apRaw = findSection(rows, "PERFORMANCE_APPRAISAL");
-  const appraisal = apRaw.filter(r => r[0] && r[1]).map(r => ({
-    tier: (r[0] || "").trim(),
-    indikator: (r[1] || "").trim(),
-    bobot: pct(r[2]),
-    skor: pct(r[3]),
-  }));
-
-  return { hdr, perf, papan, kaldik, cashflow, commitments, peserta, fotos, appraisal };
-}
-
-// ─────────────────────────────────────────────────────────────
-// SAMPLE DATA (fallback when CSV_URL is empty)
-// ─────────────────────────────────────────────────────────────
-const SAMPLE_CSV = `Section,Key,Value
-Header,Periode,Juni 2026
-Header,PM,Ghina
-PERFORMA_TIM
-Program,LeadsT,LeadsR,IntT,IntR,DUT,DUR,UjianT,UjianR,BiayaT,BiayaR,SIS,Rapot,Kaldik
-DBE,295,183,113,31,17,4,28,6,93000000,71046188,0.87,0,0.333
-MMBA,420,90,76,8,20,0,32,3,171000000,156430000,0.87,0,0.333
-SIC,460,69,70,11,17,0,30,1,92500000,49200000,0.87,0,0.333
-DBS,124,9,36,0,4,0,8,0,32500000,27200000,0.87,0,0.333
-Brevet,175,5,20,1,8,0,10,1,54000000,12250000,0.87,0,0.333
-
-PAPAN_PERFORMA
-Program,KPI,W1,W2,W3,W4,W5
-DBE,Leads,0.306,0.338,0.026,0,0
-MMBA,Leads,0,0.084,0.051,0.008,0
-SIC,Leads,0.059,0.009,0.050,0.024,0
-DBS,Leads,0,0.008,0.008,0,0
-Brevet,Leads,0.018,0,0,0,0
-DBE,Interview,0.045,0.138,0.097,0,0
-MMBA,Interview,0,0.018,0.053,0,0
-SIC,Interview,0.097,0.040,0.013,0,0
-DBS,Interview,0,0,0,0,0
-Brevet,Interview,0.033,0,0,0,0
-DBE,Daftar Ujian,0.051,0.167,0,0,0
-MMBA,Daftar Ujian,0.021,0,0.042,0,0
-SIC,Daftar Ujian,0,0.033,0,0,0
-DBS,Daftar Ujian,0,0,0,0,0
-Brevet,Daftar Ujian,0.067,0,0,0,0
-DBE,Daftar Ulang,0,0.083,0.111,0,0
-MMBA,Daftar Ulang,0,0,0,0,0
-SIC,Daftar Ulang,0,0,0,0,0
-DBS,Daftar Ulang,0,0,0,0,0
-Brevet,Daftar Ulang,0,0.067,0,0,0
-
-KALDIK_EVENTS
-Tanggal,Program,Judul,Done
-20,DBE,Orientasi,FALSE
-6,MMBA,Asesmen CRA,TRUE
-20,SIC,Graduation,FALSE
-
-CASHFLOW_BULAN
-Key,Value
-Plan,500000
-Reality,750000
-
-TOP_COMMITMENT
-Judul,Status,Deadline
-Review wajib minggu depan (all program),URGENT,20/06/2026
-Pengisian Asertif (Deadline 25 Juni),URGENT,25/06/2026
-ATPI!!,URGENT,20/06/2026
-Buat aturan reward & share ke group,URGENT,22/06/2026
-Follow up peserta belum bayar,URGENT,23/06/2026
-
-PESERTA_AKTIF_RINGKAS
-Batch,Program,Target,Aktif,Mundur,SudahBayar,BelumBayar,BayarPct
-DBE-5,DBE,62,51,1,44,7,0.710
-MMBA-5,MMBA,57,49,0,40,9,0.702
-DBS-3,DBS,13,13,0,10,3,0.769
-SIC-4,SIC,37,20,0,18,2,0.486
-Brevet-2,Brevet,27,11,0,6,5,0.222
-
-FOTO_TIM
-Program,URL
-DBE,https://drive.google.com/thumbnail?id=1MywpZ8s01M24c47m-jxeAHXqqhwtXCha&sz=w400
-MMBA,https://drive.google.com/thumbnail?id=1iSw_kPDCJSxWNLlYTfN25yrjc_azJVzX&sz=w400
-SIC,https://drive.google.com/thumbnail?id=183tPBw1vjeCzfeOICJ6RuwDyyh0q9jS7&sz=w400
-DBS,https://drive.google.com/thumbnail?id=12yZvrjALqe2hhV3y7n94je6eyjhQkKXg&sz=w400
-BREVET,https://drive.google.com/thumbnail?id=1-hyWkWmrERA4cGR2p-yL67Gdr2Xz7C2U&sz=w400
-
-PERFORMANCE_APPRAISAL
-Tier,Indikator,Bobot,Skor
-WIG,Peserta Aktif,0.5,0.735
-LM,Daftar Ulang,0.2,0.072
-LM,Daftar Ujian,0.15,0.088
-LM,Cashflow,0.05,0.667
-DLM,Rapot,0.05,0
-DLM,Kaldik,0.05,0.333`;
-
-// ─────────────────────────────────────────────────────────────
-// DATA HOOK
-// ─────────────────────────────────────────────────────────────
-function useData() {
-  const [data, setData] = useState(null);
-  const [status, setStatus] = useState("loading");
-
-  useEffect(() => {
-    if (!CSV_URL) {
-      setData(buildData(SAMPLE_CSV));
-      setStatus("sample");
-      return;
-    }
-    fetch(CSV_URL)
-      .then(r => r.text())
-      .then(text => {
-        if (text.trim().startsWith("<!") || text.trim().startsWith("<html")) {
-          throw new Error("URL mengembalikan HTML, bukan CSV. Pastikan URL adalah publish-to-web CSV.");
-        }
-        setData(buildData(text));
-        setStatus("live");
-      })
-      .catch(e => {
-        console.error("CSV fetch error:", e.message);
-        setData(buildData(SAMPLE_CSV));
-        setStatus("error");
-      });
-  }, []);
-  return { data, status };
-}
-
-// ─────────────────────────────────────────────────────────────
-// COMPONENTS
-// ─────────────────────────────────────────────────────────────
-
-function Badge({ status }) {
-  const map = {
-    live: { color: C.green, bg: C.greenBg, txt: C.greenTxt, label: "Live dari Google Sheets" },
-    sample: { color: C.orange, bg: C.orangeBg, txt: C.orangeTxt, label: "Data Sampel" },
-    error: { color: C.red, bg: C.redBg, txt: C.redTxt, label: "Gagal fetch — data sampel" },
-    loading: { color: C.muted, bg: "#f3f4f6", txt: C.muted, label: "Memuat..." },
+  return {
+    periode: meta["Periode"] || "",
+    pm: meta["PM"] || "",
+    performaTim: buckets.performaTim || [],
+    papan: buckets.papan || [],
+    kaldik: buckets.kaldik || [],
+    cashflow: buckets.cashflow || [],
+    commitment: buckets.commitment || [],
+    pesertaAktif: buckets.pesertaAktif || [],
+    weekly: buckets.weekly || [],
+    appraisal: buckets.appraisal || [],
   };
-  const s = map[status] || map.loading;
+}
+
+/* =====================================================================
+   SAMPLE (preview saat CSV gagal)
+   ===================================================================== */
+const SAMPLE = {
+  periode: "Juni 2026", pm: "Ghina",
+  performaTim: [
+    { Program:"DBE",LeadsT:0,LeadsR:0,IntT:0,IntR:0,DUT:17,DUR:3,UjianT:28,UjianR:6,BiayaT:93000000,BiayaR:69546188,SIS:0.87,Status:"Kritis" },
+    { Program:"MMBA",LeadsT:0,LeadsR:0,IntT:0,IntR:0,DUT:20,DUR:8,UjianT:32,UjianR:9,BiayaT:171000000,BiayaR:156430000,SIS:0.87,Status:"Aman" },
+    { Program:"SIC",LeadsT:0,LeadsR:0,IntT:0,IntR:0,DUT:17,DUR:6,UjianT:30,UjianR:5,BiayaT:92500000,BiayaR:49200000,SIS:0.87,Status:"Waspada" },
+    { Program:"DBS",LeadsT:0,LeadsR:0,IntT:0,IntR:0,DUT:13,DUR:4,UjianT:18,UjianR:3,BiayaT:32500000,BiayaR:27200000,SIS:0.87,Status:"Waspada" },
+    { Program:"Brevet",LeadsT:0,LeadsR:0,IntT:0,IntR:0,DUT:8,DUR:2,UjianT:10,UjianR:1,BiayaT:54000000,BiayaR:12250000,SIS:0.87,Status:"Kritis" },
+    { Program:"CCC",LeadsT:0,LeadsR:0,IntT:0,IntR:0,DUT:0,DUR:0,UjianT:0,UjianR:0,BiayaT:0,BiayaR:0,SIS:0,Status:"-" },
+  ],
+  papan: [
+    { Program:"DBE",KPI:"Daftar Ujian",W1:0.05,W2:0.10,W3:0.15,W4:0.18,W5:0.21 },
+    { Program:"MMBA",KPI:"Daftar Ujian",W1:0.04,W2:0.08,W3:0.16,W4:0.22,W5:0.28 },
+    { Program:"SIC",KPI:"Daftar Ujian",W1:0.02,W2:0.06,W3:0.10,W4:0.14,W5:0.17 },
+    { Program:"DBS",KPI:"Daftar Ujian",W1:0.03,W2:0.07,W3:0.11,W4:0.13,W5:0.16 },
+    { Program:"Brevet",KPI:"Daftar Ujian",W1:0.01,W2:0.04,W3:0.06,W4:0.08,W5:0.10 },
+    { Program:"DBE",KPI:"Daftar Ulang",W1:0.02,W2:0.06,W3:0.12,W4:0.15,W5:0.18 },
+    { Program:"MMBA",KPI:"Daftar Ulang",W1:0.05,W2:0.12,W3:0.22,W4:0.31,W5:0.40 },
+    { Program:"SIC",KPI:"Daftar Ulang",W1:0.04,W2:0.10,W3:0.20,W4:0.28,W5:0.35 },
+    { Program:"DBS",KPI:"Daftar Ulang",W1:0.03,W2:0.08,W3:0.18,W4:0.25,W5:0.31 },
+    { Program:"Brevet",KPI:"Daftar Ulang",W1:0.02,W2:0.06,W3:0.12,W4:0.18,W5:0.25 },
+    { Program:"DBE",KPI:"Leads",W1:0.10,W2:0.20,W3:0.30,W4:0.40,W5:0.50 },
+    { Program:"MMBA",KPI:"Leads",W1:0.15,W2:0.25,W3:0.35,W4:0.45,W5:0.55 },
+    { Program:"SIC",KPI:"Leads",W1:0.08,W2:0.18,W3:0.28,W4:0.38,W5:0.48 },
+    { Program:"DBE",KPI:"Interview",W1:0.05,W2:0.12,W3:0.20,W4:0.28,W5:0.35 },
+    { Program:"MMBA",KPI:"Interview",W1:0.08,W2:0.18,W3:0.28,W4:0.38,W5:0.48 },
+  ],
+  kaldik: [
+    { Tanggal:6,Program:"MMBA",Judul:"Asesmen CRA",Done:"True" },
+    { Tanggal:20,Program:"DBE",Judul:"Orientasi",Done:"False" },
+    { Tanggal:20,Program:"SIC",Judul:"Graduation",Done:"False" },
+    { Tanggal:12,Program:"DBS",Judul:"Workshop Brand",Done:"True" },
+    { Tanggal:25,Program:"Brevet",Judul:"Closing Batch",Done:"False" },
+  ],
+  cashflow: [{ Key:"Plan",Value:120000000 },{ Key:"Reality",Value:95000000 }],
+  commitment: [
+    { Judul:"Performance Tracking Board (minggu depan jadi)",Status:"URGENT",Deadline:"25/06/2026" },
+    { Judul:"Pengisian Asertif (Deadline 25 Juni)",Status:"URGENT",Deadline:"30/06/2026" },
+    { Judul:"Sosialisasi Presensi WHT",Status:"Selesai",Deadline:"13/06/2026" },
+    { Judul:"Buat aturan reward & share ke group",Status:"URGENT",Deadline:"25/06/2026" },
+  ],
+  pesertaAktif: [
+    { Batch:"DBE-5",Program:"DBE",Target:62,Aktif:51,Mundur:1,SudahBayar:43,BelumBayar:8,BayarPct:0.69 },
+    { Batch:"MMBA-5",Program:"MMBA",Target:49,Aktif:46,Mundur:0,SudahBayar:30,BelumBayar:16,BayarPct:0.65 },
+    { Batch:"SIC-4",Program:"SIC",Target:37,Aktif:20,Mundur:0,SudahBayar:14,BelumBayar:6,BayarPct:0.70 },
+    { Batch:"DBS-3",Program:"DBS",Target:13,Aktif:12,Mundur:1,SudahBayar:9,BelumBayar:3,BayarPct:0.75 },
+    { Batch:"Brevet-2",Program:"Brevet",Target:27,Aktif:11,Mundur:0,SudahBayar:6,BelumBayar:5,BayarPct:0.22 },
+  ],
+  weekly: [],
+  appraisal: [
+    { Tier:"WIG",Indikator:"Peserta Aktif",Bobot:"",Skor:"" },
+    { Tier:"LM",Indikator:"Daftar Ulang",Bobot:"",Skor:"" },
+    { Tier:"LM",Indikator:"Daftar Ujian",Bobot:"",Skor:"" },
+    { Tier:"LM",Indikator:"Cashflow",Bobot:"",Skor:"" },
+    { Tier:"DLM",Indikator:"Rapot",Bobot:"",Skor:"" },
+    { Tier:"DLM",Indikator:"Kaldik",Bobot:"",Skor:"" },
+  ],
+};
+
+/* =====================================================================
+   IKON
+   ===================================================================== */
+const Crown = ({ size = 18, color = "#E8A317" }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill={color} aria-hidden>
+    <path d="M3 7l4.5 3.2L12 4l4.5 6.2L21 7l-1.6 11H4.6L3 7z" />
+  </svg>
+);
+
+/* =====================================================================
+   AVATAR
+   ===================================================================== */
+function Avatar({ program, size = 34 }) {
+  const m = metaOf(program);
+  const [broken, setBroken] = useState(false);
+  if (m.avatar && !broken) {
+    return <img className="pm-ava" src={m.avatar} alt={program}
+      onError={() => setBroken(true)}
+      style={{ width: size, height: size, borderColor: m.color }} />;
+  }
   return (
-    <span style={{
-      display: "inline-flex", alignItems: "center", gap: 6,
-      padding: "6px 14px", borderRadius: 20, fontSize: 13, fontWeight: 600,
-      background: s.bg, color: s.txt,
-    }}>
-      <span style={{ width: 8, height: 8, borderRadius: "50%", background: s.color, display: "inline-block" }} />
-      {s.label}
+    <span className="pm-ava pm-ava--init"
+      style={{ width: size, height: size, background: m.color, fontSize: size * 0.32 }}>
+      {(program || "?").slice(0, 2).toUpperCase()}
     </span>
   );
 }
 
-function ProgDot({ prog, size = 10 }) {
-  return <span style={{
-    width: size, height: size, borderRadius: "50%", display: "inline-block",
-    background: PROG[prog] || C.muted, flexShrink: 0,
-  }} />;
-}
-
-function SectionLabel({ letter, color }) {
+/* =====================================================================
+   HERO
+   ===================================================================== */
+function Hero({ periode, pm }) {
   return (
-    <span style={{
-      display: "inline-flex", alignItems: "center", justifyContent: "center",
-      width: 26, height: 26, borderRadius: 6, fontSize: 13, fontWeight: 700,
-      background: color || C.navy, color: "#fff", marginRight: 10,
-    }}>{letter}</span>
+    <header className="pm-hero" style={HERO_IMAGE ? { backgroundImage: `url(${HERO_IMAGE})` } : undefined}>
+      <div className="pm-hero__scrim" />
+      <div className="pm-hero__inner">
+        <span className="pm-eyebrow">Performance Management · MCU</span>
+        <h1 className="pm-hero__title">Scoreboard Program Manager</h1>
+        <div className="pm-hero__meta">
+          <span><b>{periode || "—"}</b></span>
+          <span className="pm-dot" />
+          <span>PM&nbsp;<b>{pm || "—"}</b></span>
+        </div>
+      </div>
+    </header>
   );
 }
 
-function PctBadge({ value, inverse }) {
-  const v = typeof value === "number" ? value : pct(value);
-  const good = inverse ? v <= 1 : v >= 0.85;
-  const warn = inverse ? v <= 1.15 : v >= 0.6;
-  const bg = v === 0 ? "#f3f4f6" : good ? C.greenBg : warn ? C.orangeBg : C.redBg;
-  const fg = v === 0 ? C.muted : good ? C.greenTxt : warn ? C.orangeTxt : C.redTxt;
-  return (
-    <span style={{
-      padding: "2px 8px", borderRadius: 4, fontSize: 13, fontWeight: 600,
-      background: bg, color: fg, whiteSpace: "nowrap",
-    }}>{fmtPct(v)}</span>
-  );
-}
+/* =====================================================================
+   SUMMARY CARDS (di atas Performa Tim)
+   ===================================================================== */
+function SummaryCards({ data }) {
+  const programs = (data.performaTim || []).filter((r) => r.Program && (r.Status || "").trim() !== "-");
 
-// ─────────────────────────────────────────────────────────────
-// OVERVIEW TABLE
-// ─────────────────────────────────────────────────────────────
-function PerfTable({ perf }) {
-  const totals = useMemo(() => {
-    const t = { leadsT: 0, leadsR: 0, intT: 0, intR: 0, duT: 0, duR: 0, ujianT: 0, ujianR: 0, biayaT: 0, biayaR: 0 };
-    perf.forEach(p => {
-      t.leadsT += p.leadsT; t.leadsR += p.leadsR;
-      t.intT += p.intT; t.intR += p.intR;
-      t.duT += p.duT; t.duR += p.duR;
-      t.ujianT += p.ujianT; t.ujianR += p.ujianR;
-      t.biayaT += p.biayaT; t.biayaR += p.biayaR;
-    });
-    return t;
-  }, [perf]);
+  // Performance Appraisal: weighted average pakai bobot dari section appraisal
+  const pa = data.appraisal || [];
+  const totalBobot = pa.reduce((s, r) => s + num(r.Bobot), 0);
+  const weighted = pa.reduce((s, r) => s + num(r.Bobot) * num(r.Skor), 0);
+  const paScore = totalBobot > 0 ? weighted / totalBobot : null;
 
-  const thStyle = {
-    padding: "10px 12px", fontSize: 11, fontWeight: 700, color: C.muted,
-    textTransform: "uppercase", letterSpacing: "0.05em", borderBottom: `2px solid ${C.border}`,
-    textAlign: "center", whiteSpace: "nowrap",
-  };
-  const tdStyle = {
-    padding: "10px 12px", fontSize: 14, borderBottom: `1px solid ${C.border}`,
-    textAlign: "center", whiteSpace: "nowrap",
-  };
+  // Kaldik
+  const kaldikDone = (data.kaldik || []).filter((e) => truthy(e.Done)).length;
+  const kaldikTotal = (data.kaldik || []).length;
+
+  // SIS rata-rata
+  const sisVals = programs.map((r) => num(r.SIS)).filter((v) => v > 0);
+  const sisAvg = sisVals.length ? sisVals.reduce((a, b) => a + b, 0) / sisVals.length : 0;
+
+  const cards = [
+    { label: "Program Dimonitor", value: programs.length, sub: "program aktif", tone: "ink" },
+    { label: "Skor Performance Appraisal", value: paScore != null ? pct(paScore) : "—",
+      sub: totalBobot > 0 ? `bobot ${pct(totalBobot)} terkonfigurasi` : "bobot belum diisi di sheet 90", tone: "violet" },
+    { label: "Kaldik", value: kaldikTotal ? `${kaldikDone}/${kaldikTotal}` : "—",
+      sub: kaldikTotal ? `${pct(kaldikDone / kaldikTotal)} terlaksana` : "belum ada agenda", tone: "teal" },
+    { label: "SIS Rata-rata", value: sisAvg ? pct(sisAvg) : "—", sub: "kepatuhan WHT", tone: "gold" },
+  ];
 
   return (
-    <div style={{ overflowX: "auto", borderRadius: 12, background: C.white, border: `1px solid ${C.border}` }}>
-      <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 900 }}>
-        <thead>
-          <tr style={{ background: C.light }}>
-            <th style={{ ...thStyle, textAlign: "left", minWidth: 120 }}>Program</th>
-            <th style={thStyle}>Leads</th>
-            <th style={thStyle}></th>
-            <th style={thStyle}>%</th>
-            <th style={thStyle}>Interview</th>
-            <th style={thStyle}></th>
-            <th style={thStyle}>DU</th>
-            <th style={thStyle}></th>
-            <th style={thStyle}>%</th>
-            <th style={thStyle}>Biaya</th>
-            <th style={thStyle}></th>
-            <th style={thStyle}>%</th>
-            <th style={thStyle}>SIS</th>
-            <th style={thStyle}>Kaldik</th>
-          </tr>
-          <tr style={{ background: C.light }}>
-            <th style={{ ...thStyle, borderTop: 0, paddingTop: 0 }}></th>
-            <th style={{ ...thStyle, borderTop: 0, paddingTop: 0, fontSize: 10, color: "#9ca3af" }}>Target</th>
-            <th style={{ ...thStyle, borderTop: 0, paddingTop: 0, fontSize: 10, color: "#9ca3af" }}>Real</th>
-            <th style={{ ...thStyle, borderTop: 0, paddingTop: 0 }}></th>
-            <th style={{ ...thStyle, borderTop: 0, paddingTop: 0, fontSize: 10, color: "#9ca3af" }}>Target</th>
-            <th style={{ ...thStyle, borderTop: 0, paddingTop: 0, fontSize: 10, color: "#9ca3af" }}>Real</th>
-            <th style={{ ...thStyle, borderTop: 0, paddingTop: 0, fontSize: 10, color: "#9ca3af" }}>Target</th>
-            <th style={{ ...thStyle, borderTop: 0, paddingTop: 0, fontSize: 10, color: "#9ca3af" }}>Real</th>
-            <th style={{ ...thStyle, borderTop: 0, paddingTop: 0 }}></th>
-            <th style={{ ...thStyle, borderTop: 0, paddingTop: 0, fontSize: 10, color: "#9ca3af" }}>Target</th>
-            <th style={{ ...thStyle, borderTop: 0, paddingTop: 0, fontSize: 10, color: "#9ca3af" }}>Real</th>
-            <th style={{ ...thStyle, borderTop: 0, paddingTop: 0 }}></th>
-            <th style={{ ...thStyle, borderTop: 0, paddingTop: 0 }}></th>
-            <th style={{ ...thStyle, borderTop: 0, paddingTop: 0 }}></th>
-          </tr>
-        </thead>
-        <tbody>
-          {perf.map((p, i) => (
-            <tr key={p.prog} style={{ background: i % 2 === 0 ? C.white : C.light }}>
-              <td style={{ ...tdStyle, textAlign: "left", fontWeight: 600 }}>
-                <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <ProgDot prog={p.prog} />
-                  {p.prog}
-                </span>
-              </td>
-              <td style={{ ...tdStyle, color: C.muted }}>{p.leadsT || "—"}</td>
-              <td style={{ ...tdStyle, fontWeight: 600 }}>{p.leadsR || "—"}</td>
-              <td style={tdStyle}><PctBadge value={p.leadsPct} /></td>
-              <td style={{ ...tdStyle, color: C.muted }}>{p.intT || "—"}</td>
-              <td style={{ ...tdStyle, fontWeight: 600 }}>{p.intR || "—"}</td>
-              <td style={{ ...tdStyle, color: C.muted }}>{p.duT || "—"}</td>
-              <td style={{ ...tdStyle, fontWeight: 600 }}>{p.duR || "—"}</td>
-              <td style={tdStyle}><PctBadge value={p.duPct} /></td>
-              <td style={{ ...tdStyle, color: C.muted, fontSize: 12 }}>{rp(p.biayaT)}</td>
-              <td style={{ ...tdStyle, fontWeight: 600, fontSize: 12 }}>{rp(p.biayaR)}</td>
-              <td style={tdStyle}><PctBadge value={p.biayaPct} /></td>
-              <td style={tdStyle}><PctBadge value={p.sis} /></td>
-              <td style={tdStyle}><PctBadge value={p.kaldik} /></td>
-            </tr>
-          ))}
-          {/* TOTAL ROW */}
-          <tr style={{ background: C.navy, color: "#fff" }}>
-            <td style={{ ...tdStyle, textAlign: "left", fontWeight: 700, color: "#fff", borderBottom: 0 }}>TOTAL/AVG</td>
-            <td style={{ ...tdStyle, color: "rgba(255,255,255,0.6)", borderBottom: 0 }}>{totals.leadsT}</td>
-            <td style={{ ...tdStyle, fontWeight: 700, color: "#fff", borderBottom: 0 }}>{totals.leadsR}</td>
-            <td style={{ ...tdStyle, borderBottom: 0 }}><PctBadge value={totals.leadsT ? totals.leadsR / totals.leadsT : 0} /></td>
-            <td style={{ ...tdStyle, color: "rgba(255,255,255,0.6)", borderBottom: 0 }}>{totals.intT}</td>
-            <td style={{ ...tdStyle, fontWeight: 700, color: "#fff", borderBottom: 0 }}>{totals.intR}</td>
-            <td style={{ ...tdStyle, color: "rgba(255,255,255,0.6)", borderBottom: 0 }}>{totals.duT}</td>
-            <td style={{ ...tdStyle, fontWeight: 700, color: "#fff", borderBottom: 0 }}>{totals.duR}</td>
-            <td style={{ ...tdStyle, borderBottom: 0 }}><PctBadge value={totals.duT ? totals.duR / totals.duT : 0} /></td>
-            <td style={{ ...tdStyle, color: "rgba(255,255,255,0.6)", fontSize: 12, borderBottom: 0 }}>{rp(totals.biayaT)}</td>
-            <td style={{ ...tdStyle, fontWeight: 700, color: "#fff", fontSize: 12, borderBottom: 0 }}>{rp(totals.biayaR)}</td>
-            <td style={{ ...tdStyle, borderBottom: 0 }}><PctBadge value={totals.biayaT ? totals.biayaR / totals.biayaT : 0} /></td>
-            <td style={{ ...tdStyle, color: "rgba(255,255,255,0.5)", borderBottom: 0 }}>—</td>
-            <td style={{ ...tdStyle, color: "rgba(255,255,255,0.5)", borderBottom: 0 }}>—</td>
-          </tr>
-        </tbody>
-      </table>
+    <div className="pm-summary">
+      {cards.map((c) => (
+        <div key={c.label} className={`pm-summary__card pm-summary__card--${c.tone}`}>
+          <div className="pm-summary__value">{c.value}</div>
+          <div className="pm-summary__label">{c.label}</div>
+          <div className="pm-summary__sub">{c.sub}</div>
+        </div>
+      ))}
     </div>
   );
 }
 
-// ─────────────────────────────────────────────────────────────
-// CARD B: KALDIK CHECKLIST — DONUT
-// ─────────────────────────────────────────────────────────────
-function KaldikDonut({ kaldik }) {
-  const selesai = kaldik.filter(k => k.done).length;
-  const belum = kaldik.filter(k => !k.done).length;
-  const total = kaldik.length || 1;
-  const pctDone = selesai / total;
-
-  const radius = 60, stroke = 14;
-  const circ = 2 * Math.PI * radius;
-  const offset = circ * (1 - pctDone);
-
-  const perluPerhatian = kaldik.filter(k => !k.done);
-
-  return (
-    <div style={{ background: C.white, borderRadius: 16, padding: 24, border: `1px solid ${C.border}`, height: "100%" }}>
-      <div style={{ display: "flex", alignItems: "center", marginBottom: 16 }}>
-        <SectionLabel letter="B" color={C.teal} />
-        <span style={{ fontWeight: 700, fontSize: 16, color: C.ink }}>Kaldik — Checklist</span>
-      </div>
-      <div style={{ display: "flex", gap: 24, alignItems: "center" }}>
-        <div style={{ position: "relative", width: 140, height: 140, flexShrink: 0 }}>
-          <svg width="140" height="140" viewBox="0 0 140 140">
-            <circle cx="70" cy="70" r={radius} fill="none" stroke={C.border} strokeWidth={stroke} />
-            <circle cx="70" cy="70" r={radius} fill="none" stroke={C.green}
-              strokeWidth={stroke} strokeDasharray={circ} strokeDashoffset={offset}
-              strokeLinecap="round" transform="rotate(-90 70 70)"
-              style={{ transition: "stroke-dashoffset 1s ease" }} />
-          </svg>
-          <div style={{
-            position: "absolute", inset: 0, display: "flex", alignItems: "center",
-            justifyContent: "center", flexDirection: "column",
-          }}>
-            <span style={{ fontSize: 28, fontWeight: 800, color: C.ink }}>{Math.round(pctDone * 100)}%</span>
-          </div>
-        </div>
-        <div style={{ fontSize: 14 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-            <span style={{ width: 10, height: 10, borderRadius: "50%", background: C.green }} />
-            <span>Selesai</span>
-            <span style={{ fontWeight: 700, marginLeft: "auto" }}>{selesai}</span>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-            <span style={{ width: 10, height: 10, borderRadius: "50%", background: C.orange }} />
-            <span>Progress</span>
-            <span style={{ fontWeight: 700, marginLeft: "auto" }}>0</span>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-            <span style={{ width: 10, height: 10, borderRadius: "50%", background: C.red }} />
-            <span>Terlambat</span>
-            <span style={{ fontWeight: 700, marginLeft: "auto" }}>0</span>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ width: 10, height: 10, borderRadius: "50%", background: "#9ca3af" }} />
-            <span>Belum</span>
-            <span style={{ fontWeight: 700, marginLeft: "auto" }}>{belum}</span>
-          </div>
-        </div>
-      </div>
-      {perluPerhatian.length > 0 && (
-        <div style={{ marginTop: 16, fontSize: 13, color: C.muted }}>
-          <div style={{ fontWeight: 600, marginBottom: 4 }}>Perlu perhatian:</div>
-          {perluPerhatian.slice(0, 3).map((k, i) => (
-            <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
-              <ProgDot prog={k.prog} size={8} />
-              <span>{k.prog} — {k.title} (tgl {k.day})</span>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────
-// CARD C: EFISIENSI CASHFLOW
-// ─────────────────────────────────────────────────────────────
-function CashflowCard({ cashflow }) {
-  const { plan, reality } = cashflow;
-  const variance = plan > 0 ? ((reality - plan) / plan) : 0;
-  const profit = reality - plan;
+/* =====================================================================
+   A. PERFORMA TIM
+   ===================================================================== */
+function PerformaTim({ rows }) {
+  // Hanya 5 kategori, semua T|R. Hapus SIS/Rapot/Kaldik/Skor/Status.
+  const groups = [
+    { label: "Leads",         t: "LeadsT",  r: "LeadsR",  kind: "count" },
+    { label: "Interview",     t: "IntT",    r: "IntR",    kind: "count" },
+    { label: "Daftar Ujian",  t: "UjianT",  r: "UjianR",  kind: "count" },
+    { label: "Daftar Ulang",  t: "DUT",     r: "DUR",     kind: "count" },
+    { label: "Biaya",         t: "BiayaT",  r: "BiayaR",  kind: "money" },
+  ];
+  const fmt = (kind, v) => (v === "" || v == null) ? "—" : (kind === "money" ? rupiah(v) : Math.round(num(v)));
 
   return (
-    <div style={{ background: C.white, borderRadius: 16, padding: 24, border: `1px solid ${C.border}`, height: "100%" }}>
-      <div style={{ display: "flex", alignItems: "center", marginBottom: 20 }}>
-        <SectionLabel letter="C" color={C.green} />
-        <span style={{ fontWeight: 700, fontSize: 16, color: C.ink }}>Efisiensi Cashflow</span>
-      </div>
-      <div style={{ display: "flex", gap: 16 }}>
-        <div style={{ flex: 1, background: C.blueBg, borderRadius: 12, padding: 16, textAlign: "center" }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: C.navy, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Cash In</div>
-          <div style={{ fontSize: 22, fontWeight: 800, color: C.navy }}>{rp(reality)}</div>
-          <div style={{ fontSize: 12, color: C.greenTxt, marginTop: 4 }}>
-            ▲ {fmtPct(plan > 0 ? reality / plan : 0)} vs target
-          </div>
-        </div>
-        <div style={{ flex: 1, background: C.redBg, borderRadius: 12, padding: 16, textAlign: "center" }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: C.redTxt, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Cash Out</div>
-          <div style={{ fontSize: 22, fontWeight: 800, color: C.redTxt }}>{rp(plan)}</div>
-          <div style={{ fontSize: 12, color: C.redTxt, marginTop: 4 }}>
-            ▼ {fmtPct(1)} vs budget
-          </div>
-        </div>
-      </div>
-      <div style={{
-        marginTop: 16, background: C.greenBg, borderRadius: 12, padding: 16, textAlign: "center",
-      }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: C.greenTxt, textTransform: "uppercase", letterSpacing: "0.05em" }}>PROFIT</div>
-        <div style={{ fontSize: 24, fontWeight: 800, color: C.greenTxt }}>{rp(profit)}</div>
-        <div style={{ fontSize: 12, color: C.greenTxt, marginTop: 2 }}>
-          ▲ {plan > 0 ? fmtPct(profit / plan) : "0%"} vs target
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────
-// CARD D: RAPOT — SIS
-// ─────────────────────────────────────────────────────────────
-function RapotSISCard({ perf }) {
-  const avgSIS = perf.length ? perf.reduce((a, p) => a + p.sis, 0) / perf.length : 0;
-  const sisScore = Math.round(avgSIS * 5 * 10) / 10; // out of 5
-  const stars = Math.round(sisScore);
-
-  return (
-    <div style={{ background: C.white, borderRadius: 16, padding: 24, border: `1px solid ${C.border}`, height: "100%", display: "flex", flexDirection: "column", alignItems: "center" }}>
-      <div style={{ display: "flex", alignItems: "center", marginBottom: 20, alignSelf: "flex-start" }}>
-        <SectionLabel letter="D" color="#7c3aed" />
-        <span style={{ fontWeight: 700, fontSize: 16, color: C.ink }}>Rapot — SIS</span>
-      </div>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 4, marginBottom: 8 }}>
-        <span style={{ fontSize: 56, fontWeight: 800, color: C.ink, lineHeight: 1 }}>{sisScore.toFixed(1)}</span>
-        <span style={{ fontSize: 20, color: C.muted, fontWeight: 600 }}>/5</span>
-      </div>
-      <div style={{ display: "flex", gap: 4, marginBottom: 16 }}>
-        {[1, 2, 3, 4, 5].map(n => (
-          <span key={n} style={{ fontSize: 24, color: n <= stars ? "#f59e0b" : "#d1d5db" }}>★</span>
-        ))}
-      </div>
-      <div style={{ fontSize: 13, color: C.muted, textAlign: "center" }}>
-        Rata-rata SIS semua program: <strong>{fmtPct(avgSIS)}</strong>
-      </div>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────
-// CARD E: KALENDER STRATEGI
-// ─────────────────────────────────────────────────────────────
-function KalenderCard({ kaldik, periode }) {
-  const bulan = parseInt(periode?.match(/\d+/)?.[0]) || 6;
-  const tahun = parseInt(periode?.match(/(\d{4})/)?.[1]) || 2026;
-  const daysInMonth = new Date(tahun, bulan, 0).getDate();
-  const firstDow = new Date(tahun, bulan - 1, 1).getDay(); // 0=Sun
-  const dayNames = ["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"];
-  const today = new Date();
-  const isThisMonth = today.getFullYear() === tahun && today.getMonth() === bulan - 1;
-  const todayDate = isThisMonth ? today.getDate() : -1;
-
-  const eventDays = new Set(kaldik.map(k => k.day));
-
-  const cells = [];
-  const startOffset = firstDow === 0 ? 6 : firstDow - 1; // Monday start
-  for (let i = 0; i < startOffset; i++) cells.push(null);
-  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
-
-  const agenda = kaldik.filter(k => k.day && k.title).slice(0, 5);
-
-  return (
-    <div style={{ background: C.white, borderRadius: 16, padding: 24, border: `1px solid ${C.border}`, height: "100%" }}>
-      <div style={{ display: "flex", alignItems: "center", marginBottom: 16 }}>
-        <SectionLabel letter="E" color="#6366f1" />
-        <span style={{ fontWeight: 700, fontSize: 16, color: C.ink }}>Kalender Strategi</span>
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2, textAlign: "center", marginBottom: 16 }}>
-        {dayNames.map(d => (
-          <div key={d} style={{ fontSize: 11, fontWeight: 600, color: C.muted, padding: 4 }}>{d}</div>
-        ))}
-        {cells.map((d, i) => {
-          if (!d) return <div key={`e${i}`} />;
-          const isToday = d === todayDate;
-          const hasEvent = eventDays.has(d);
-          return (
-            <div key={d} style={{
-              padding: 4, fontSize: 13, fontWeight: isToday || hasEvent ? 700 : 400,
-              borderRadius: "50%", width: 32, height: 32, display: "flex",
-              alignItems: "center", justifyContent: "center", margin: "0 auto",
-              background: isToday ? C.blue : hasEvent ? C.blueBg : "transparent",
-              color: isToday ? "#fff" : hasEvent ? C.navy : C.ink,
-            }}>{d}</div>
-          );
-        })}
-      </div>
-      {agenda.length > 0 && (
-        <div>
-          <div style={{ fontSize: 13, fontWeight: 700, color: C.ink, marginBottom: 8 }}>Agenda terdekat:</div>
-          {agenda.map((k, i) => (
-            <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, fontSize: 13 }}>
-              <ProgDot prog={k.prog} size={10} />
-              <span style={{ fontWeight: 600, color: C.muted, minWidth: 48 }}>{k.day} Jun</span>
-              <span style={{ color: C.ink }}>{k.title}</span>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────
-// TOP COMMITMENTS
-// ─────────────────────────────────────────────────────────────
-function CommitmentsCard({ commitments }) {
-  if (!commitments.length) return null;
-  return (
-    <div style={{ background: C.white, borderRadius: 16, padding: 24, border: `1px solid ${C.border}` }}>
-      <div style={{ display: "flex", alignItems: "center", marginBottom: 16 }}>
-        <SectionLabel letter="F" color={C.red} />
-        <span style={{ fontWeight: 700, fontSize: 16, color: C.ink }}>Top Komitmen Urgent</span>
-      </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {commitments.slice(0, 5).map((c, i) => (
-          <div key={i} style={{
-            display: "flex", alignItems: "center", gap: 12, padding: "10px 14px",
-            borderRadius: 10, background: C.light, border: `1px solid ${C.border}`,
-          }}>
-            <span style={{
-              width: 24, height: 24, borderRadius: "50%", background: C.red,
-              color: "#fff", fontSize: 12, fontWeight: 700,
-              display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-            }}>{i + 1}</span>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 14, fontWeight: 600, color: C.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.title}</div>
-            </div>
-            <span style={{ fontSize: 12, color: C.muted, whiteSpace: "nowrap" }}>{c.deadline}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────
-// PERFORMANCE APPRAISAL
-// ─────────────────────────────────────────────────────────────
-function AppraisalCard({ appraisal }) {
-  if (!appraisal.length) return null;
-  const totalWeighted = appraisal.reduce((a, r) => a + r.bobot * r.skor, 0);
-  const totalBobot = appraisal.reduce((a, r) => a + r.bobot, 0);
-
-  const tierColors = { WIG: "#2563eb", LM: "#0891b2", DLM: "#7c3aed" };
-
-  return (
-    <div style={{ background: C.white, borderRadius: 16, padding: 24, border: `1px solid ${C.border}` }}>
-      <div style={{ display: "flex", alignItems: "center", marginBottom: 16 }}>
-        <SectionLabel letter="G" color={C.navy} />
-        <span style={{ fontWeight: 700, fontSize: 16, color: C.ink }}>Performance Appraisal</span>
-      </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-        {appraisal.map((r, i) => (
-          <div key={i} style={{
-            display: "grid", gridTemplateColumns: "60px 1fr 60px 80px 1fr",
-            gap: 8, alignItems: "center", padding: "8px 12px",
-            borderRadius: 8, background: C.light,
-          }}>
-            <span style={{
-              fontSize: 11, fontWeight: 700, color: tierColors[r.tier] || C.muted,
-              padding: "2px 8px", borderRadius: 4, textAlign: "center",
-              background: r.tier === "WIG" ? C.blueBg : r.tier === "LM" ? "#cffafe" : "#ede9fe",
-            }}>{r.tier}</span>
-            <span style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>{r.indikator}</span>
-            <span style={{ fontSize: 12, color: C.muted, textAlign: "center" }}>{fmtPct(r.bobot)}</span>
-            <span style={{ textAlign: "center" }}><PctBadge value={r.skor} /></span>
-            <div style={{ height: 6, borderRadius: 3, background: C.border, overflow: "hidden" }}>
-              <div style={{
-                width: `${Math.min(r.skor * 100, 100)}%`, height: "100%",
-                borderRadius: 3, background: tierColors[r.tier] || C.muted,
-                transition: "width 1s ease",
-              }} />
-            </div>
-          </div>
-        ))}
-      </div>
-      <div style={{
-        marginTop: 12, padding: "12px 16px", borderRadius: 10,
-        background: `linear-gradient(135deg, ${C.navy}, ${C.navy2})`, color: "#fff",
-        display: "flex", justifyContent: "space-between", alignItems: "center",
-      }}>
-        <span style={{ fontSize: 14, fontWeight: 600 }}>Skor Tertimbang Total</span>
-        <span style={{ fontSize: 22, fontWeight: 800 }}>{fmtPct(totalWeighted)}</span>
-      </div>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────
-// PESERTA AKTIF TABLE
-// ─────────────────────────────────────────────────────────────
-function PesertaTable({ peserta }) {
-  if (!peserta.length) return null;
-  return (
-    <div style={{ background: C.white, borderRadius: 16, padding: 24, border: `1px solid ${C.border}` }}>
-      <div style={{ fontWeight: 700, fontSize: 16, color: C.ink, marginBottom: 16 }}>
-        Peserta Aktif — Semua Batch
-      </div>
-      <div style={{ overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+    <Section letter="A" title="Performa Tim" caption="Target vs Realisasi per kategori funnel">
+      <div className="pm-tablewrap">
+        <table className="pm-table">
           <thead>
-            <tr>
-              {["Batch", "Target", "Aktif", "Mundur", "Bayar", "Belum", "% Bayar"].map(h => (
-                <th key={h} style={{
-                  padding: "8px 10px", fontSize: 11, fontWeight: 700, color: C.muted,
-                  textTransform: "uppercase", borderBottom: `2px solid ${C.border}`,
-                  textAlign: h === "Batch" ? "left" : "center",
-                }}>{h}</th>
+            <tr className="pm-table__grouprow">
+              <th rowSpan={2} className="pm-sticky">Program</th>
+              {groups.map((g) => <th key={g.label} colSpan={2} className="pm-grouphd">{g.label}</th>)}
+            </tr>
+            <tr className="pm-table__subrow">
+              {groups.map((g) => (
+                <React.Fragment key={g.label}>
+                  <th className="pm-tr">Target</th><th className="pm-tr pm-tr--real">Realisasi</th>
+                </React.Fragment>
               ))}
             </tr>
           </thead>
           <tbody>
-            {peserta.map((p, i) => (
-              <tr key={p.batch} style={{ background: i % 2 === 0 ? C.white : C.light }}>
-                <td style={{ padding: "8px 10px", fontWeight: 600, borderBottom: `1px solid ${C.border}` }}>
-                  <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <ProgDot prog={p.prog} size={8} />
-                    {p.batch}
-                  </span>
+            {rows.length === 0 && (
+              <tr><td className="pm-empty" colSpan={1 + groups.length * 2}>Belum ada data Performa Tim di export.</td></tr>
+            )}
+            {rows.map((row) => (
+              <tr key={row.Program}>
+                <td className="pm-sticky pm-prog">
+                  <span className="pm-chip" style={{ background: metaOf(row.Program).color }} />
+                  {row.Program}
                 </td>
-                <td style={{ padding: "8px 10px", textAlign: "center", borderBottom: `1px solid ${C.border}` }}>{p.target}</td>
-                <td style={{ padding: "8px 10px", textAlign: "center", fontWeight: 700, borderBottom: `1px solid ${C.border}` }}>{p.aktif}</td>
-                <td style={{ padding: "8px 10px", textAlign: "center", color: p.mundur > 0 ? C.red : C.muted, borderBottom: `1px solid ${C.border}` }}>{p.mundur}</td>
-                <td style={{ padding: "8px 10px", textAlign: "center", color: C.greenTxt, fontWeight: 600, borderBottom: `1px solid ${C.border}` }}>{p.sudahBayar}</td>
-                <td style={{ padding: "8px 10px", textAlign: "center", color: p.belumBayar > 0 ? C.redTxt : C.muted, fontWeight: 600, borderBottom: `1px solid ${C.border}` }}>{p.belumBayar}</td>
-                <td style={{ padding: "8px 10px", textAlign: "center", borderBottom: `1px solid ${C.border}` }}><PctBadge value={p.bayarPct} /></td>
+                {groups.map((g) => (
+                  <React.Fragment key={g.label}>
+                    <td className="pm-tr">{fmt(g.kind, row[g.t])}</td>
+                    <td className="pm-tr pm-tr--real">{fmt(g.kind, row[g.r])}</td>
+                  </React.Fragment>
+                ))}
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-    </div>
+    </Section>
   );
 }
 
-// ─────────────────────────────────────────────────────────────
-// TAB: PAPAN PERFORMA (animated weekly bars)
-// ─────────────────────────────────────────────────────────────
-function PapanPerforma({ papan }) {
-  const kpis = Object.keys(papan);
-  const [selKPI, setSelKPI] = useState(kpis[0] || "Leads");
-  const weeks = ["W1", "W2", "W3", "W4", "W5"];
-  const programs = Object.keys(papan[selKPI] || {});
-
-  const maxVal = useMemo(() => {
-    let m = 0;
-    programs.forEach(p => weeks.forEach(w => { m = Math.max(m, papan[selKPI]?.[p]?.[w] || 0); }));
-    return m || 1;
-  }, [selKPI, papan]);
-
+/* =====================================================================
+   B. PESERTA AKTIF
+   ===================================================================== */
+function PesertaAktif({ rows }) {
+  if (!rows || rows.length === 0) {
+    return (
+      <Section letter="B" title="Peserta Aktif" caption="Angkatan berjalan tiap program">
+        <div className="pm-empty">
+          Belum ada data Peserta Aktif. Pastikan section <code>PESERTA_AKTIF_RINGKASAN</code> ada di tab 90 dan
+          baris sub-header berisi <code>Batch | Program | Target | Aktif | Mundur | SudahBayar | BelumBayar | BayarPct</code>.
+        </div>
+      </Section>
+    );
+  }
   return (
-    <div>
-      <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
-        {kpis.map(k => (
-          <button key={k} onClick={() => setSelKPI(k)} style={{
-            padding: "8px 18px", borderRadius: 8, border: `1px solid ${selKPI === k ? C.navy : C.border}`,
-            background: selKPI === k ? C.navy : C.white, color: selKPI === k ? "#fff" : C.ink,
-            fontWeight: 600, fontSize: 13, cursor: "pointer",
-          }}>{k}</button>
-        ))}
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16 }}>
-        {weeks.map(w => {
-          const sorted = [...programs]
-            .map(p => ({ prog: p, val: papan[selKPI]?.[p]?.[w] || 0 }))
-            .sort((a, b) => b.val - a.val);
+    <Section letter="B" title="Peserta Aktif" caption="Angkatan berjalan tiap program">
+      <div className="pm-grid pm-grid--cards">
+        {rows.map((r) => {
+          const aktif = r.Aktif === "" || r.Aktif == null ? null : num(r.Aktif);
+          const target = num(r.Target);
+          const bayar = num(r.BayarPct);
+          const bayarVal = Math.abs(bayar) <= 1.5 ? bayar : bayar / 100;
           return (
-            <div key={w} style={{ background: C.white, borderRadius: 14, padding: 20, border: `1px solid ${C.border}` }}>
-              <div style={{ fontSize: 15, fontWeight: 700, color: C.ink, marginBottom: 14 }}>{w}</div>
-              {sorted.map((s, i) => (
-                <div key={s.prog} style={{ marginBottom: 10 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 4 }}>
-                    <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      <ProgDot prog={s.prog} size={8} />
-                      <span style={{ fontWeight: 600 }}>{s.prog}</span>
-                    </span>
-                    <span style={{ fontWeight: 700, color: PROG[s.prog] || C.ink }}>{fmtPct(s.val)}</span>
-                  </div>
-                  <div style={{ height: 8, borderRadius: 4, background: C.border, overflow: "hidden" }}>
-                    <div style={{
-                      height: "100%", borderRadius: 4,
-                      background: `linear-gradient(90deg, ${PROG[s.prog] || C.muted}, ${PROG[s.prog] || C.muted}cc)`,
-                      width: `${Math.min((s.val / maxVal) * 100, 100)}%`,
-                      transition: "width 0.8s ease",
-                    }} />
-                  </div>
+            <div key={r.Batch} className="pm-card">
+              <div className="pm-card__head">
+                <Avatar program={r.Program} size={30} />
+                <div>
+                  <div className="pm-card__title">{r.Batch}</div>
+                  <div className="pm-card__sub">Target {target || "—"} peserta</div>
                 </div>
-              ))}
+                <div className="pm-card__big">{aktif == null ? "—" : aktif}<span>aktif</span></div>
+              </div>
+              <div className="pm-bar pm-bar--thin">
+                <div className="pm-bar__fill" style={{
+                  width: `${Math.min(100, bayarVal * 100)}%`,
+                  background: metaOf(r.Program).color,
+                }} />
+              </div>
+              <div className="pm-card__stats">
+                <span>Bayar <b>{num(r.SudahBayar)}</b></span>
+                <span>Belum <b>{num(r.BelumBayar)}</b></span>
+                <span>Mundur <b>{num(r.Mundur)}</b></span>
+                <span className="pm-card__pct">{pct(r.BayarPct)} bayar</span>
+              </div>
             </div>
           );
         })}
       </div>
-    </div>
+    </Section>
   );
 }
 
-// ─────────────────────────────────────────────────────────────
-// TAB: KALDIK (calendar view)
-// ─────────────────────────────────────────────────────────────
-function KaldikTab({ kaldik, periode }) {
-  const bulan = 6; // Juni
-  const tahun = 2026;
-  const daysInMonth = new Date(tahun, bulan, 0).getDate();
-  const firstDow = new Date(tahun, bulan - 1, 1).getDay();
-  const startOffset = firstDow === 0 ? 6 : firstDow - 1;
-  const dayNames = ["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"];
-  const today = new Date();
-  const todayDate = today.getMonth() === bulan - 1 ? today.getDate() : -1;
+/* =====================================================================
+   C. KALDIK CHECKLIST (donut chart)
+   ===================================================================== */
+function KaldikChecklist({ rows }) {
+  const sorted = [...rows].sort((a, b) => num(a.Tanggal) - num(b.Tanggal));
+  const selesai = sorted.filter((e) => truthy(e.Done)).length;
+  const belum = sorted.filter((e) => !truthy(e.Done)).length;
+  const total = sorted.length || 1;
+  const pctDone = selesai / total;
+  const radius = 54, stroke = 12;
+  const circ = 2 * Math.PI * radius;
+  const offset = circ * (1 - pctDone);
+  const perlu = sorted.filter((e) => !truthy(e.Done));
 
-  const eventsByDay = {};
-  kaldik.forEach(k => {
-    if (!eventsByDay[k.day]) eventsByDay[k.day] = [];
-    eventsByDay[k.day].push(k);
+  return (
+    <Section letter="C" title="Kaldik — Checklist" caption="Agenda kalender akademik bulan ini">
+      {sorted.length === 0 && <div className="pm-empty">Belum ada agenda bulan ini.</div>}
+      {sorted.length > 0 && (
+        <div className="pm-donut-wrap">
+          <div className="pm-donut-left">
+            <svg width="130" height="130" viewBox="0 0 130 130">
+              <circle cx="65" cy="65" r={radius} fill="none" stroke="#E4E8F0" strokeWidth={stroke} />
+              <circle cx="65" cy="65" r={radius} fill="none" stroke="var(--teal)" strokeWidth={stroke}
+                strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round"
+                transform="rotate(-90 65 65)" style={{ transition: "stroke-dashoffset 1s ease" }} />
+            </svg>
+            <div className="pm-donut-center">
+              <span className="pm-donut-pct">{Math.round(pctDone * 100)}%</span>
+            </div>
+          </div>
+          <div className="pm-donut-legend">
+            <div className="pm-donut-legend__row"><span className="pm-donut-dot" style={{ background: "var(--teal)" }} />Selesai<b>{selesai}</b></div>
+            <div className="pm-donut-legend__row"><span className="pm-donut-dot" style={{ background: "var(--gold)" }} />Progress<b>0</b></div>
+            <div className="pm-donut-legend__row"><span className="pm-donut-dot" style={{ background: "var(--red)" }} />Terlambat<b>0</b></div>
+            <div className="pm-donut-legend__row"><span className="pm-donut-dot" style={{ background: "#94A3B8" }} />Belum<b>{belum}</b></div>
+          </div>
+        </div>
+      )}
+      {perlu.length > 0 && (
+        <div className="pm-donut-alert">
+          <div className="pm-donut-alert__title">Perlu perhatian:</div>
+          {perlu.slice(0, 5).map((e, i) => (
+            <div key={i} className="pm-donut-alert__item">
+              <span className="pm-chip" style={{ background: metaOf(e.Program).color }} />
+              <span>{e.Program} — {e.Judul} (tgl {num(e.Tanggal)})</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </Section>
+  );
+}
+
+/* =====================================================================
+   KALDIK CALENDAR (tab tersendiri)
+   ===================================================================== */
+const MONTHS_ID = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
+
+function KaldikCalendar({ rows, periode }) {
+  const [mName, yStr] = (periode || "").split(" ");
+  const month = MONTHS_ID.indexOf(mName);
+  const year = parseInt(yStr) || new Date().getFullYear();
+  if (month < 0) {
+    return <Section letter="" title="Kaldik Kalender">
+      <div className="pm-empty">Periode tidak valid: <code>{periode || "(kosong)"}</code>. Format yang diharapkan: <code>Juni 2026</code>.</div>
+    </Section>;
+  }
+
+  const firstDay = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  const byDay = {};
+  (rows || []).forEach((e) => {
+    const d = num(e.Tanggal);
+    if (d > 0) (byDay[d] = byDay[d] || []).push(e);
   });
 
   const cells = [];
-  for (let i = 0; i < startOffset; i++) cells.push(null);
+  for (let i = 0; i < firstDay; i++) cells.push(null);
   for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  const dayNames = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
 
   return (
-    <div style={{ background: C.white, borderRadius: 16, padding: 24, border: `1px solid ${C.border}` }}>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4, textAlign: "center" }}>
-        {dayNames.map(d => (
-          <div key={d} style={{ padding: 8, fontSize: 12, fontWeight: 700, color: C.muted }}>{d}</div>
+    <Section letter="" title={`Kaldik · ${mName} ${year}`} caption="Kalender akademik bulanan">
+      <div className="pm-cal">
+        <div className="pm-cal__head">
+          {dayNames.map((d, i) => <div key={d} className={`pm-cal__hd ${i === 0 ? "is-sun" : ""}`}>{d}</div>)}
+        </div>
+        <div className="pm-cal__grid">
+          {cells.map((d, i) => (
+            <div key={i} className={`pm-cal__cell ${d == null ? "is-empty" : ""} ${i % 7 === 0 && d != null ? "is-sun" : ""}`}>
+              {d != null && (
+                <>
+                  <div className="pm-cal__num">{d}</div>
+                  <div className="pm-cal__events">
+                    {(byDay[d] || []).map((e, j) => (
+                      <div key={j} className={`pm-cal__event ${truthy(e.Done) ? "is-done" : ""}`}
+                        style={{ borderLeftColor: metaOf(e.Program).color }}
+                        title={`${e.Program}: ${e.Judul}`}>
+                        <span className="pm-cal__prog" style={{ color: metaOf(e.Program).color }}>{e.Program}</span>
+                        <span className="pm-cal__title">{e.Judul}</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </Section>
+  );
+}
+
+/* =====================================================================
+   D. EFISIENSI CASHFLOW (Cash In / Cash Out / Profit)
+   ===================================================================== */
+function CashoutEfisiensi({ rows }) {
+  const get = (k) => num((rows.find((r) => (r.Key || "").toLowerCase() === k) || {}).Value);
+  const plan = get("plan"), reality = get("reality");
+  const profit = reality - plan;
+  const pctVsTarget = plan > 0 ? reality / plan : 0;
+  const pctVsBudget = plan > 0 ? plan / plan : 0;
+  const pctProfit = plan > 0 ? profit / plan : 0;
+  return (
+    <Section letter="D" title="Efisiensi Cashflow" caption="Cash in, cash out & profit bulan ini">
+      <div className="pm-cf-row">
+        <div className="pm-cf-box pm-cf-box--blue">
+          <div className="pm-cf-box__label">CASH IN</div>
+          <div className="pm-cf-box__value">{rupiah(reality)}</div>
+          <div className="pm-cf-box__hint pm-cf-box__hint--green">▲ {pct(pctVsTarget)} vs target</div>
+        </div>
+        <div className="pm-cf-box pm-cf-box--red">
+          <div className="pm-cf-box__label">CASH OUT</div>
+          <div className="pm-cf-box__value">{rupiah(plan)}</div>
+          <div className="pm-cf-box__hint pm-cf-box__hint--red">▼ {pct(pctVsBudget)} vs budget</div>
+        </div>
+      </div>
+      <div className="pm-cf-profit">
+        <div className="pm-cf-profit__label">PROFIT</div>
+        <div className="pm-cf-profit__value">{rupiah(profit)}</div>
+        <div className="pm-cf-profit__hint">▲ {pct(Math.abs(pctProfit))} vs target</div>
+      </div>
+    </Section>
+  );
+}
+
+/* =====================================================================
+   E. KOMITMEN URGENT (FILTER URGENT ONLY)
+   ===================================================================== */
+function KomitmenUrgent({ rows }) {
+  const filtered = (rows || []).filter((c) => /urgent/i.test(c.Status || ""));
+  return (
+    <Section letter="E" title="Komitmen Urgent" caption="Yang harus dieksekusi paling dulu">
+      <div className="pm-urgent">
+        {filtered.length === 0 && <div className="pm-empty">Tidak ada komitmen urgent. 🎉</div>}
+        {filtered.map((c, i) => (
+          <div key={i} className="pm-urgent__item">
+            <span className="pm-urgent__flag">URGENT</span>
+            <span className="pm-urgent__title">{c.Judul}</span>
+            <span className="pm-urgent__due">{c.Deadline || "—"}</span>
+          </div>
         ))}
-        {cells.map((d, i) => {
-          if (!d) return <div key={`e${i}`} style={{ minHeight: 80 }} />;
-          const evts = eventsByDay[d] || [];
-          const isToday = d === todayDate;
+      </div>
+    </Section>
+  );
+}
+
+/* =====================================================================
+   PAPAN PERFORMA (per-minggu, KPI: Leads/Int/DJ/DU)
+   ===================================================================== */
+function PapanPerforma({ papan, weekly }) {
+  const kpis = ["Leads", "Interview", "Daftar Ujian", "Daftar Ulang"];
+  const [kpi, setKpi] = useState("Daftar Ujian");
+  const [week, setWeek] = useState("W1");
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { const t = setTimeout(() => setMounted(true), 60); return () => clearTimeout(t); }, []);
+
+  // Format: cek apakah ada kolom W1..W5
+  const hasWeekly = papan.length > 0 && (papan[0].W1 !== undefined || papan[0].W2 !== undefined);
+  const weekOpts = hasWeekly ? ["W1", "W2", "W3", "W4", "W5"] : [];
+
+  const lanes = useMemo(() => {
+    const filtered = papan.filter((r) => (r.KPI || "").trim() === kpi);
+    const out = filtered.map((r) => ({
+      program: r.Program,
+      pct: hasWeekly ? num(r[week]) : num(r.Pct),
+    }));
+    return out.sort((a, b) => b.pct - a.pct);
+  }, [papan, kpi, week, hasWeekly]);
+
+  const maxPct = Math.max(0.0001, ...lanes.map((l) => Math.abs(l.pct) <= 1.5 ? l.pct : l.pct / 100));
+  const leader = lanes[0]?.program;
+
+  return (
+    <Section letter="" title="Papan Performa" caption={hasWeekly ? `Capaian per minggu · ${week}` : "Capaian per program"}>
+      <div className="pm-kpitoggle">
+        {kpis.map((k) => (
+          <button key={k} className={`pm-toggle ${kpi === k ? "is-active" : ""}`}
+            onClick={() => setKpi(k)}>{k}</button>
+        ))}
+      </div>
+
+      {hasWeekly && (
+        <div className="pm-weekselect">
+          <span className="pm-weekselect__label">Minggu</span>
+          {weekOpts.map((w) => (
+            <button key={w} className={`pm-weekbtn ${week === w ? "is-active" : ""}`}
+              onClick={() => setWeek(w)}>{w}</button>
+          ))}
+        </div>
+      )}
+
+      <div className="pm-track">
+        {lanes.map((l, i) => {
+          const v = Math.abs(l.pct) <= 1.5 ? l.pct : l.pct / 100;
+          const w = mounted ? Math.max(8, (v / maxPct) * 100) : 8;
+          const isLead = l.program === leader && v > 0;
           return (
-            <div key={d} style={{
-              minHeight: 80, padding: 6, borderRadius: 10,
-              border: isToday ? `2px solid ${C.blue}` : `1px solid ${C.border}`,
-              background: isToday ? C.blueBg : C.white,
-            }}>
-              <div style={{ fontSize: 13, fontWeight: isToday ? 800 : 500, color: isToday ? C.blue : C.ink, marginBottom: 4 }}>{d}</div>
-              {evts.map((e, j) => (
-                <div key={j} style={{
-                  fontSize: 10, padding: "2px 4px", borderRadius: 4, marginBottom: 2,
-                  background: PROG_BG[e.prog] || "#f3f4f6",
-                  color: PROG[e.prog] || C.ink,
-                  fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                  textDecoration: e.done ? "line-through" : "none",
-                  opacity: e.done ? 0.6 : 1,
-                }}>
-                  {e.prog}: {e.title}
+            <div key={l.program} className="pm-lane">
+              <div className="pm-lane__rank">{i + 1}</div>
+              <div className="pm-lane__name">{l.program}</div>
+              <div className="pm-lane__rail">
+                <div className="pm-lane__fill" style={{ width: `${w}%`, background: metaOf(l.program).color }}>
+                  <span className="pm-lane__pct">{pct(l.pct)}</span>
                 </div>
-              ))}
+                <div className="pm-lane__runner" style={{ left: `calc(${w}% - 17px)` }}>
+                  {isLead && <span className="pm-lane__crown"><Crown /></span>}
+                  <Avatar program={l.program} size={34} />
+                </div>
+              </div>
             </div>
           );
         })}
+        {lanes.length === 0 && <div className="pm-empty">Belum ada data untuk {kpi}{hasWeekly ? ` (${week})` : ""}.</div>}
       </div>
-    </div>
+
+      <WeeklyHistory weekly={weekly} />
+    </Section>
   );
 }
 
-// ─────────────────────────────────────────────────────────────
-// MAIN APP
-// ─────────────────────────────────────────────────────────────
-export default function App() {
-  const { data, status } = useData();
-  const [tab, setTab] = useState("overview");
-
-  if (!data) {
+function WeeklyHistory({ weekly }) {
+  const build = (kpi) => {
+    const wk = weekly.filter((r) => (r.KPI || "").trim() === kpi)
+      .map((r) => ({ week: r.Week, program: r.Program, pct: num(r.Pct) }))
+      .sort((a, b) => (a.week || "").localeCompare(b.week || ""));
+    const tally = {};
+    wk.forEach((w) => { if (w.program) tally[w.program] = (tally[w.program] || 0) + 1; });
+    const champ = Object.entries(tally).sort((a, b) => b[1] - a[1])[0];
+    return { wk, champ };
+  };
+  const cols = [
+    { kpi: "Daftar Ujian", ...build("Daftar Ujian") },
+    { kpi: "Daftar Ulang", ...build("Daftar Ulang") },
+  ];
+  if (!weekly || weekly.length === 0) {
     return (
-      <div style={{
-        minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center",
-        background: C.bg, fontFamily: "'Inter', -apple-system, sans-serif",
-      }}>
-        <div style={{ textAlign: "center", color: C.muted }}>
-          <div style={{ fontSize: 32, marginBottom: 8 }}>⏳</div>
-          <div style={{ fontSize: 16 }}>Memuat data...</div>
-        </div>
+      <div className="pm-weekly pm-weekly--empty">
+        <div className="pm-empty">History mingguan belum tersedia. Isi section <code>WEEKLY_LEADER</code> di tab 90.</div>
       </div>
     );
   }
-
-  const { hdr, perf, papan, kaldik, cashflow, commitments, peserta, fotos, appraisal } = data;
-
-  const tabs = [
-    { key: "overview", label: "Overview" },
-    { key: "papan", label: "Papan Performa" },
-    { key: "kaldik", label: "Kaldik" },
-  ];
-
   return (
-    <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "'Inter', -apple-system, sans-serif" }}>
-      {/* HEADER */}
-      <div style={{
-        background: `linear-gradient(135deg, ${C.navy} 0%, ${C.navy2} 100%)`,
-        padding: "24px 32px 0",
-      }}>
-        <div style={{ maxWidth: 1400, margin: "0 auto" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-              {FOTO_PM && (
-                <img src={FOTO_PM} alt="PM" style={{
-                  width: 44, height: 44, borderRadius: "50%", objectFit: "cover",
-                  border: "2px solid rgba(255,255,255,0.3)",
-                }} />
-              )}
-              <div>
-                <div style={{ fontSize: 20, fontWeight: 800, color: "#fff" }}>
-                  PM Scoreboard — {hdr.PM || "PM"}
-                </div>
-                <div style={{ fontSize: 13, color: "rgba(255,255,255,0.7)" }}>
-                  {hdr.Periode || "Periode"}
-                </div>
+    <div className="pm-weekly">
+      <div className="pm-weekly__head">History Mingguan · Pemuncak per Minggu</div>
+      <div className="pm-weekly__cols">
+        {cols.map((c) => (
+          <div key={c.kpi} className="pm-weekly__col">
+            <div className="pm-weekly__kpi">{c.kpi}</div>
+            <ol className="pm-weekly__list">
+              {c.wk.map((w, i) => (
+                <li key={i}>
+                  <span className="pm-weekly__wk">{w.week}</span>
+                  <Avatar program={w.program} size={22} />
+                  <span className="pm-weekly__prog">{w.program}</span>
+                  <span className="pm-weekly__pct">{pct(w.pct)}</span>
+                </li>
+              ))}
+            </ol>
+            {c.champ && (
+              <div className="pm-weekly__champ">
+                <Crown size={16} />
+                <span><b>{c.champ[0]}</b> unggul {c.champ[1]}× → kandidat reward</span>
               </div>
-            </div>
-            <Badge status={status} />
+            )}
           </div>
-          {/* TABS */}
-          <div style={{ display: "flex", gap: 0 }}>
-            {tabs.map(t => (
-              <button key={t.key} onClick={() => setTab(t.key)} style={{
-                padding: "12px 24px", border: "none", cursor: "pointer",
-                fontSize: 14, fontWeight: 600,
-                background: tab === t.key ? C.bg : "transparent",
-                color: tab === t.key ? C.navy : "rgba(255,255,255,0.7)",
-                borderRadius: tab === t.key ? "10px 10px 0 0" : 0,
-                transition: "all 0.2s ease",
-              }}>{t.label}</button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* CONTENT */}
-      <div style={{ maxWidth: 1400, margin: "0 auto", padding: "24px 32px 40px" }}>
-        {tab === "overview" && (
-          <div>
-            {/* SECTION A: PERFORMA TIM */}
-            <div style={{ marginBottom: 24 }}>
-              <div style={{ display: "flex", alignItems: "center", marginBottom: 12 }}>
-                <SectionLabel letter="A" color={C.navy} />
-                <span style={{ fontWeight: 700, fontSize: 18, color: C.ink }}>Performa Tim — Semua Program</span>
-                <span style={{
-                  marginLeft: 12, fontSize: 12, padding: "3px 10px",
-                  borderRadius: 12, background: C.greenBg, color: C.greenTxt, fontWeight: 600,
-                }}>{perf.length} Program Aktif</span>
-              </div>
-              <PerfTable perf={perf} />
-            </div>
-
-            {/* 4 CARDS ROW */}
-            <div style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-              gap: 20, marginBottom: 24,
-            }}>
-              <KaldikDonut kaldik={kaldik} />
-              <CashflowCard cashflow={cashflow} />
-              <RapotSISCard perf={perf} />
-              <KalenderCard kaldik={kaldik} periode={hdr.Periode} />
-            </div>
-
-            {/* COMMITMENTS + APPRAISAL ROW */}
-            <div style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr",
-              gap: 20, marginBottom: 24,
-            }}>
-              <CommitmentsCard commitments={commitments} />
-              <AppraisalCard appraisal={appraisal} />
-            </div>
-
-            {/* PESERTA AKTIF */}
-            <PesertaTable peserta={peserta} />
-          </div>
-        )}
-
-        {tab === "papan" && <PapanPerforma papan={papan} />}
-
-        {tab === "kaldik" && <KaldikTab kaldik={kaldik} periode={hdr.Periode} />}
-      </div>
-
-      {/* FOOTER */}
-      <div style={{ textAlign: "center", padding: "16px 0 32px", fontSize: 12, color: C.muted }}>
-        Sumber data: tab 90_EXPORT_DASHBOARD (publish-to-web CSV). Refresh halaman untuk update terbaru.
+        ))}
       </div>
     </div>
   );
 }
+
+/* =====================================================================
+   PRIMITIF
+   ===================================================================== */
+function Section({ letter, title, caption, children }) {
+  return (
+    <section className="pm-section">
+      <div className="pm-section__head">
+        {letter && <span className="pm-section__letter">{letter}</span>}
+        <div>
+          <h2 className="pm-section__title">{title}</h2>
+          {caption && <p className="pm-section__caption">{caption}</p>}
+        </div>
+      </div>
+      {children}
+    </section>
+  );
+}
+function Stat({ label, value, tone = "muted", hint }) {
+  return (
+    <div className={`pm-stat pm-stat--${tone}`}>
+      <div className="pm-stat__label">{label}</div>
+      <div className="pm-stat__value">{value}</div>
+      {hint && <div className="pm-stat__hint">{hint}</div>}
+    </div>
+  );
+}
+
+/* =====================================================================
+   APP
+   ===================================================================== */
+export default function App() {
+  const [data, setData] = useState(null);
+  const [tab, setTab] = useState("dashboard");
+  const [live, setLive] = useState(false);
+  const [fetchErr, setFetchErr] = useState("");
+
+  useEffect(() => {
+    let alive = true;
+    if (CSV_URL.includes("GANTI_DENGAN_PUB_ID")) {
+      setFetchErr("CSV_URL belum diganti di App.jsx baris ~12. Tempel URL publish-to-web milikmu.");
+      setData(SAMPLE);
+      return;
+    }
+    fetch(CSV_URL)
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status} ${r.statusText}`);
+        return r.text();
+      })
+      .then((t) => {
+        if (!t) throw new Error("Respons kosong");
+        if (t.trim().toLowerCase().startsWith("<")) {
+          throw new Error("URL mengembalikan HTML, bukan CSV. Pastikan link adalah /pub?...&output=csv (bukan /edit?...). Cara: File → Bagikan → Publikasikan ke web → pilih tab 90 → format CSV.");
+        }
+        const shaped = shapeData(parseCSV(t));
+        if (alive) { setData(shaped); setLive(true); }
+      })
+      .catch((err) => { if (alive) { setData(SAMPLE); setFetchErr(err.message || String(err)); } });
+    return () => { alive = false; };
+  }, []);
+
+  if (!data) return <div className="pm-loading">Memuat scoreboard…</div>;
+
+  return (
+    <div className="pm-root">
+      <StyleTag />
+      <Hero periode={data.periode} pm={data.pm} />
+
+      {!live && (
+        <div className="pm-banner">
+          <b>Data contoh ditampilkan.</b> {fetchErr}
+        </div>
+      )}
+
+      <nav className="pm-tabs">
+        <button className={tab === "dashboard" ? "is-active" : ""} onClick={() => setTab("dashboard")}>Overview</button>
+        <button className={tab === "papan" ? "is-active" : ""} onClick={() => setTab("papan")}>Papan Performa</button>
+        <button className={tab === "kaldik" ? "is-active" : ""} onClick={() => setTab("kaldik")}>Kaldik</button>
+      </nav>
+
+      <main className="pm-main">
+        {tab === "dashboard" && (
+          <>
+            <SummaryCards data={data} />
+            <PerformaTim rows={data.performaTim} />
+            <PesertaAktif rows={data.pesertaAktif} />
+            <KaldikChecklist rows={data.kaldik} />
+            <CashoutEfisiensi rows={data.cashflow} />
+            <KomitmenUrgent rows={data.commitment} />
+          </>
+        )}
+        {tab === "papan" && <PapanPerforma papan={data.papan} weekly={data.weekly} />}
+        {tab === "kaldik" && <KaldikCalendar rows={data.kaldik} periode={data.periode} />}
+      </main>
+
+      <footer className="pm-footer">Scoreboard PM · {data.periode || "—"} · diperbarui otomatis dari Google Sheets</footer>
+    </div>
+  );
+}
+
+/* =====================================================================
+   STYLE
+   ===================================================================== */
+function StyleTag() {
+  return <style dangerouslySetInnerHTML={{ __html: CSS }} />;
+}
+
+const CSS = `
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@600&display=swap');
+
+.pm-root{--ink:#14213D;--ink2:#3A4663;--line:#E4E8F0;--bg:#F2F4F8;--card:#fff;
+  --gold:#E8A317;--teal:#0E9F8E;--red:#E5484D;--violet:#8B5CF6;
+  font-family:'Inter',system-ui,sans-serif;color:var(--ink);background:var(--bg);min-height:100vh;}
+*{box-sizing:border-box}
+.pm-loading{font-family:'Inter',sans-serif;padding:80px;text-align:center;color:#64748B}
+.pm-banner{max-width:1180px;margin:14px auto 0;padding:11px 16px;background:#FEF3C7;border:1px solid #FCD34D;
+  border-radius:10px;font-size:13px;color:#92400E;line-height:1.5}
+.pm-banner code,.pm-empty code{background:#fff;padding:1px 6px;border-radius:5px;font-family:'JetBrains Mono',monospace;font-size:12px}
+
+/* HERO */
+.pm-hero{position:relative;min-height:260px;background:linear-gradient(135deg,#14213D,#22386b 60%,#2D6CDF);
+  background-size:cover;background-position:center;display:flex;align-items:flex-end;overflow:hidden}
+.pm-hero__scrim{position:absolute;inset:0;background:linear-gradient(180deg,rgba(11,18,38,.3),rgba(11,18,38,.85))}
+.pm-hero__inner{position:relative;max-width:1180px;width:100%;margin:0 auto;padding:32px 24px 28px}
+.pm-eyebrow{font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:#9DB4E8;font-weight:600}
+.pm-hero__title{font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;color:#fff;
+  font-size:clamp(28px,4.4vw,46px);margin:8px 0 10px;line-height:1.02;letter-spacing:-.02em}
+.pm-hero__meta{display:flex;align-items:center;gap:12px;color:#DDE6F7;font-size:15px}
+.pm-hero__meta b{color:#fff}
+.pm-dot{width:5px;height:5px;border-radius:50%;background:#7E97C9}
+
+/* TABS */
+.pm-tabs{max-width:1180px;margin:18px auto 0;padding:0 24px;display:flex;gap:8px}
+.pm-tabs button{font-family:'Plus Jakarta Sans',sans-serif;font-weight:700;font-size:14px;border:1px solid var(--line);
+  background:#fff;color:var(--ink2);padding:10px 20px;border-radius:11px;cursor:pointer;transition:.15s}
+.pm-tabs button:hover{border-color:#C3CCE0}
+.pm-tabs button.is-active{background:var(--ink);color:#fff;border-color:var(--ink)}
+
+.pm-main{max-width:1180px;margin:0 auto;padding:8px 24px 10px}
+
+/* SUMMARY CARDS */
+.pm-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:18px}
+.pm-summary__card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px 20px;position:relative;overflow:hidden}
+.pm-summary__card::before{content:"";position:absolute;top:0;left:0;width:5px;height:100%}
+.pm-summary__card--ink::before{background:var(--ink)}
+.pm-summary__card--violet::before{background:var(--violet)}
+.pm-summary__card--teal::before{background:var(--teal)}
+.pm-summary__card--gold::before{background:var(--gold)}
+.pm-summary__value{font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;font-size:32px;line-height:1;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.pm-summary__card--ink .pm-summary__value{color:var(--ink)}
+.pm-summary__card--violet .pm-summary__value{color:var(--violet)}
+.pm-summary__card--teal .pm-summary__value{color:var(--teal)}
+.pm-summary__card--gold .pm-summary__value{color:var(--gold)}
+.pm-summary__label{margin-top:8px;font-size:12px;font-weight:700;color:var(--ink);text-transform:uppercase;letter-spacing:.04em}
+.pm-summary__sub{margin-top:3px;font-size:12px;color:#7C879F}
+
+/* SECTION */
+.pm-section{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:22px 22px 24px;margin-top:18px;
+  box-shadow:0 1px 2px rgba(20,33,61,.04)}
+.pm-section__head{display:flex;align-items:center;gap:14px;margin-bottom:18px}
+.pm-section__letter{font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;font-size:16px;color:#fff;
+  background:var(--ink);width:34px;height:34px;border-radius:10px;display:grid;place-items:center;flex:none}
+.pm-section__title{font-family:'Plus Jakarta Sans',sans-serif;font-weight:700;font-size:21px;margin:0;letter-spacing:-.01em}
+.pm-section__caption{margin:2px 0 0;font-size:13px;color:#7C879F}
+
+/* TABLE PERFORMA TIM */
+.pm-tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:12px}
+.pm-table{border-collapse:collapse;width:100%;font-size:13px;min-width:760px}
+.pm-table th,.pm-table td{padding:10px 12px;text-align:center;white-space:nowrap}
+.pm-table thead th{background:#F7F9FC;font-family:'Plus Jakarta Sans',sans-serif;font-weight:700;color:var(--ink2);
+  border-bottom:1px solid var(--line)}
+.pm-table__grouprow .pm-grouphd{border-left:1px solid var(--line);border-bottom:1px solid var(--line);color:var(--ink)}
+.pm-table__subrow th{font-size:11px;font-weight:600;color:#8A93A8;padding-top:6px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+.pm-tr{border-left:1px solid var(--line)}
+.pm-tr--real{font-weight:700;color:var(--ink)}
+.pm-table tbody td{border-bottom:1px solid #EEF1F6;font-variant-numeric:tabular-nums}
+.pm-table tbody tr:last-child td{border-bottom:none}
+.pm-table tbody tr:hover td{background:#FAFBFE}
+.pm-sticky{position:sticky;left:0;background:#fff;text-align:left;z-index:1}
+.pm-table thead .pm-sticky{background:#F7F9FC}
+.pm-prog{font-weight:700;display:flex;align-items:center;gap:8px}
+.pm-chip{width:10px;height:10px;border-radius:3px;flex:none;display:inline-block}
+
+/* CARDS / GRID */
+.pm-grid{display:grid;gap:14px}
+.pm-grid--cards{grid-template-columns:repeat(auto-fill,minmax(250px,1fr))}
+.pm-grid--3{grid-template-columns:repeat(3,1fr)}
+.pm-card{border:1px solid var(--line);border-radius:14px;padding:15px}
+.pm-card__head{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.pm-card__title{font-family:'Plus Jakarta Sans',sans-serif;font-weight:700;font-size:15px}
+.pm-card__sub{font-size:12px;color:#8A93A8}
+.pm-card__big{margin-left:auto;font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;font-size:26px;line-height:1;text-align:right}
+.pm-card__big span{display:block;font-size:10px;font-weight:600;color:#8A93A8;letter-spacing:.05em;text-transform:uppercase}
+.pm-card__stats{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:11px;font-size:12px;color:var(--ink2)}
+.pm-card__stats b{color:var(--ink)}
+.pm-card__pct{margin-left:auto;font-weight:700}
+
+/* BARS */
+.pm-bar{position:relative;background:#EEF1F6;border-radius:20px;overflow:hidden}
+.pm-bar--thin{height:7px;margin-top:4px}
+.pm-bar--cash{height:30px;margin-top:14px}
+.pm-bar__fill{height:100%;border-radius:20px;transition:width .9s cubic-bezier(.22,1,.36,1)}
+.pm-bar__mid{position:absolute;inset:0;display:grid;place-items:center;font-size:12px;font-weight:700;color:var(--ink)}
+
+/* STAT */
+.pm-stat{border:1px solid var(--line);border-radius:14px;padding:15px 16px}
+.pm-stat__label{font-size:12px;color:#8A93A8;font-weight:600}
+.pm-stat__value{font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;font-size:22px;margin-top:5px;font-variant-numeric:tabular-nums}
+.pm-stat__hint{font-size:11px;font-weight:700;margin-top:3px}
+.pm-stat--crit .pm-stat__value,.pm-stat--crit .pm-stat__hint{color:var(--red)}
+.pm-stat--ok .pm-stat__value,.pm-stat--ok .pm-stat__hint{color:var(--teal)}
+
+/* KALDIK DONUT */
+.pm-donut-wrap{display:flex;align-items:center;gap:24px;padding:8px 0}
+.pm-donut-left{position:relative;width:130px;height:130px;flex:none}
+.pm-donut-center{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+.pm-donut-pct{font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;font-size:26px;color:var(--ink)}
+.pm-donut-legend{display:flex;flex-direction:column;gap:8px;font-size:14px}
+.pm-donut-legend__row{display:flex;align-items:center;gap:8px}
+.pm-donut-legend__row b{margin-left:auto;font-weight:700;min-width:18px;text-align:right}
+.pm-donut-dot{width:10px;height:10px;border-radius:50%;flex:none}
+.pm-donut-alert{margin-top:14px;padding-top:10px;border-top:1px dashed var(--line);font-size:13px;color:#3A4663}
+.pm-donut-alert__title{font-weight:700;margin-bottom:6px;color:var(--ink)}
+.pm-donut-alert__item{display:flex;align-items:center;gap:8px;margin-bottom:3px}
+
+/* CASHFLOW CARDS */
+.pm-cf-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.pm-cf-box{border-radius:12px;padding:16px;text-align:center}
+.pm-cf-box--blue{background:#DBEAFE}
+.pm-cf-box--red{background:#FEE2E2}
+.pm-cf-box__label{font-family:'Plus Jakarta Sans',sans-serif;font-weight:700;font-size:11px;letter-spacing:.06em;text-transform:uppercase;margin-bottom:4px}
+.pm-cf-box--blue .pm-cf-box__label{color:#1E3A5F}
+.pm-cf-box--red .pm-cf-box__label{color:#991B1B}
+.pm-cf-box__value{font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;font-size:22px;margin-bottom:4px}
+.pm-cf-box--blue .pm-cf-box__value{color:#1E3A5F}
+.pm-cf-box--red .pm-cf-box__value{color:#991B1B}
+.pm-cf-box__hint{font-size:12px;font-weight:600}
+.pm-cf-box__hint--green{color:#065F46}
+.pm-cf-box__hint--red{color:#991B1B}
+.pm-cf-profit{margin-top:12px;background:#D1FAE5;border-radius:12px;padding:16px;text-align:center}
+.pm-cf-profit__label{font-family:'Plus Jakarta Sans',sans-serif;font-weight:700;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#065F46;margin-bottom:2px}
+.pm-cf-profit__value{font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;font-size:24px;color:#065F46}
+.pm-cf-profit__hint{font-size:12px;font-weight:600;color:#065F46;margin-top:2px}
+
+/* KALDIK CALENDAR */
+.pm-cal{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:#fff}
+.pm-cal__head{display:grid;grid-template-columns:repeat(7,1fr);background:#F7F9FC;border-bottom:1px solid var(--line)}
+.pm-cal__hd{padding:11px 8px;text-align:center;font-family:'Plus Jakarta Sans',sans-serif;font-weight:700;font-size:12px;color:var(--ink2);letter-spacing:.04em;text-transform:uppercase}
+.pm-cal__hd.is-sun{color:var(--red)}
+.pm-cal__grid{display:grid;grid-template-columns:repeat(7,1fr);grid-auto-rows:minmax(96px,auto)}
+.pm-cal__cell{border-right:1px solid #EEF1F6;border-bottom:1px solid #EEF1F6;padding:8px;display:flex;flex-direction:column;gap:4px;background:#fff}
+.pm-cal__cell:nth-child(7n){border-right:none}
+.pm-cal__cell.is-empty{background:#FAFBFE}
+.pm-cal__num{font-family:'Plus Jakarta Sans',sans-serif;font-weight:700;font-size:14px;color:var(--ink)}
+.pm-cal__cell.is-sun .pm-cal__num{color:var(--red)}
+.pm-cal__events{display:flex;flex-direction:column;gap:3px}
+.pm-cal__event{display:flex;flex-direction:column;border-left:3px solid;padding:4px 6px;background:#F7F9FC;border-radius:0 6px 6px 0;font-size:11px;line-height:1.3}
+.pm-cal__event.is-done{opacity:.55;text-decoration:line-through}
+.pm-cal__prog{font-family:'Plus Jakarta Sans',sans-serif;font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.05em}
+.pm-cal__title{color:var(--ink2)}
+
+/* URGENT */
+.pm-urgent{display:flex;flex-direction:column;gap:9px}
+.pm-urgent__item{display:flex;align-items:center;gap:13px;border:1px solid #F3D2D2;background:#FEF7F7;border-radius:11px;padding:11px 14px}
+.pm-urgent__flag{font-size:10px;font-weight:800;letter-spacing:.06em;color:#fff;background:var(--red);padding:4px 9px;border-radius:6px;flex:none}
+.pm-urgent__title{font-weight:600;font-size:14px}
+.pm-urgent__due{margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:12px;color:#C0392B;flex:none}
+
+/* PAPAN PERFORMA */
+.pm-kpitoggle{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+.pm-toggle{font-family:'Plus Jakarta Sans',sans-serif;font-weight:700;font-size:13px;border:1px solid var(--line);
+  background:#fff;color:var(--ink2);padding:8px 16px;border-radius:9px;cursor:pointer}
+.pm-toggle.is-active{background:var(--ink);color:#fff;border-color:var(--ink)}
+.pm-weekselect{display:flex;align-items:center;gap:6px;margin-bottom:18px;padding:9px 13px;background:#F7F9FC;border-radius:10px;width:fit-content}
+.pm-weekselect__label{font-size:11px;font-weight:700;color:#8A93A8;text-transform:uppercase;letter-spacing:.06em;margin-right:4px}
+.pm-weekbtn{font-family:'JetBrains Mono',monospace;font-weight:600;font-size:12px;border:none;background:transparent;color:var(--ink2);padding:5px 11px;border-radius:7px;cursor:pointer}
+.pm-weekbtn.is-active{background:var(--ink);color:#fff}
+.pm-track{display:flex;flex-direction:column;gap:16px;padding:8px 0 4px}
+.pm-lane{display:flex;align-items:center;gap:12px}
+.pm-lane__rank{font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;color:#B6C0D4;width:18px;text-align:center;flex:none}
+.pm-lane__name{font-family:'Plus Jakarta Sans',sans-serif;font-weight:700;width:64px;flex:none;font-size:14px}
+.pm-lane__rail{position:relative;flex:1;height:40px;background:#EEF1F6;border-radius:22px;
+  background-image:repeating-linear-gradient(90deg,transparent,transparent 58px,#E1E6F0 58px,#E1E6F0 60px)}
+.pm-lane__fill{position:absolute;left:0;top:0;height:100%;border-radius:22px;display:flex;align-items:center;
+  transition:width 1s cubic-bezier(.22,1,.36,1);min-width:40px}
+.pm-lane__pct{position:absolute;left:50%;transform:translateX(-50%);font-weight:800;font-size:13px;color:#fff;
+  font-family:'Plus Jakarta Sans',sans-serif;text-shadow:0 1px 2px rgba(0,0,0,.25);white-space:nowrap}
+.pm-lane__runner{position:absolute;top:50%;transform:translateY(-50%);transition:left 1s cubic-bezier(.22,1,.36,1);
+  display:flex;flex-direction:column;align-items:center}
+.pm-lane__crown{position:absolute;top:-15px;animation:pm-bob 1.6s ease-in-out infinite}
+@keyframes pm-bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
+
+/* WEEKLY HISTORY */
+.pm-weekly{margin-top:26px;border-top:1px dashed var(--line);padding-top:20px}
+.pm-weekly--empty{border-top:1px dashed var(--line)}
+.pm-weekly__head{font-family:'Plus Jakarta Sans',sans-serif;font-weight:700;font-size:15px;margin-bottom:14px}
+.pm-weekly__cols{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.pm-weekly__col{border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+.pm-weekly__kpi{font-family:'Plus Jakarta Sans',sans-serif;font-weight:700;font-size:14px;margin-bottom:10px;color:var(--ink)}
+.pm-weekly__list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:7px}
+.pm-weekly__list li{display:flex;align-items:center;gap:9px;font-size:13px}
+.pm-weekly__wk{font-family:'JetBrains Mono',monospace;font-weight:600;font-size:12px;color:#8A93A8;width:26px}
+.pm-weekly__prog{font-weight:600}
+.pm-weekly__pct{margin-left:auto;font-variant-numeric:tabular-nums;color:var(--ink2);font-weight:600}
+.pm-weekly__champ{display:flex;align-items:center;gap:8px;margin-top:12px;padding-top:11px;border-top:1px solid #EEF1F6;
+  font-size:13px;color:#92400E;background:linear-gradient(0deg,#FFFBF0,#fff);}
+.pm-weekly__champ b{color:var(--ink)}
+
+/* AVATAR */
+.pm-ava{border-radius:50%;object-fit:cover;border:2px solid #fff;box-shadow:0 1px 4px rgba(20,33,61,.2)}
+.pm-ava--init{display:grid;place-items:center;color:#fff;font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;border:2px solid #fff}
+.pm-empty{color:#8A93A8;font-size:13px;padding:14px 6px;text-align:center}
+.pm-footer{max-width:1180px;margin:8px auto 0;padding:20px 24px 36px;color:#9AA4B8;font-size:12px;text-align:center}
+
+@media(max-width:960px){
+  .pm-summary{grid-template-columns:repeat(2,1fr)}
+}
+@media(max-width:720px){
+  .pm-grid--3{grid-template-columns:1fr}
+  .pm-weekly__cols{grid-template-columns:1fr}
+  .pm-lane__name{width:50px;font-size:12px}
+  .pm-summary{grid-template-columns:1fr}
+  .pm-cal__grid{grid-auto-rows:minmax(72px,auto)}
+  .pm-cal__event{font-size:10px}
+}
+@media(prefers-reduced-motion:reduce){
+  .pm-bar__fill,.pm-lane__fill,.pm-lane__runner{transition:none}
+  .pm-lane__crown{animation:none}
+}
+`;
