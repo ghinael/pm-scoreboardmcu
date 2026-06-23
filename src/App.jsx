@@ -121,6 +121,7 @@ function shapeData(rows) {
   return {
     periode: meta["Periode"] || "",
     pm: meta["PM"] || "",
+    skorAppraisal: meta["SkorAppraisal"] || "",
     performaTim: buckets.performaTim || [],
     papan: buckets.papan || [],
     kaldik: buckets.kaldik || [],
@@ -248,11 +249,9 @@ function Hero({ periode, pm }) {
 function SummaryCards({ data }) {
   const programs = (data.performaTim || []).filter((r) => r.Program && (r.Status || "").trim() !== "-");
 
-  // Performance Appraisal: weighted average pakai bobot dari section appraisal
-  const pa = data.appraisal || [];
-  const totalBobot = pa.reduce((s, r) => s + num(r.Bobot), 0);
-  const weighted = pa.reduce((s, r) => s + num(r.Bobot) * num(r.Skor), 0);
-  const paScore = totalBobot > 0 ? weighted / totalBobot : null;
+  // Performance Appraisal: skor langsung dari H4 tab 90 (sudah dihitung di sheet)
+  const paScoreRaw = num(data.skorAppraisal);
+  const paScore = data.skorAppraisal !== "" ? paScoreRaw : null;
 
   // Kaldik
   const kaldikDone = (data.kaldik || []).filter((e) => truthy(e.Done)).length;
@@ -265,7 +264,7 @@ function SummaryCards({ data }) {
   const cards = [
     { label: "Program Dimonitor", value: programs.length, sub: "program aktif", tone: "ink" },
     { label: "Skor Performance Appraisal", value: paScore != null ? pct(paScore) : "—",
-      sub: totalBobot > 0 ? `bobot ${pct(totalBobot)} terkonfigurasi` : "bobot belum diisi di sheet 90", tone: "violet" },
+      sub: paScore != null ? "skor tertimbang dari tab 90" : "H4 belum terisi di sheet 90", tone: "violet" },
     { label: "Kaldik", value: kaldikTotal ? `${kaldikDone}/${kaldikTotal}` : "—",
       sub: kaldikTotal ? `${pct(kaldikDone / kaldikTotal)} terlaksana` : "belum ada agenda", tone: "teal" },
     { label: "SIS Rata-rata", value: sisAvg ? pct(sisAvg) : "—", sub: "kepatuhan WHT", tone: "gold" },
@@ -722,6 +721,21 @@ export default function App() {
   const [tab, setTab] = useState("dashboard");
   const [live, setLive] = useState(false);
   const [fetchErr, setFetchErr] = useState("");
+
+  // Favicon 📊 + judul tab
+  useEffect(() => {
+    const emoji = "📊";
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y="0.9em" font-size="90">${emoji}</text></svg>`;
+    const url = `data:image/svg+xml,${encodeURIComponent(svg)}`;
+    let link = document.querySelector("link[rel='icon']");
+    if (!link) {
+      link = document.createElement("link");
+      link.rel = "icon";
+      document.head.appendChild(link);
+    }
+    link.href = url;
+    document.title = "PM Scoreboard · MCU";
+  }, []);
 
   useEffect(() => {
     let alive = true;
