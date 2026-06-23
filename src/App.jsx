@@ -76,6 +76,7 @@ const SECTION_KEY = {
   CASHFLOW_BULAN: "cashflow",
   TOP_COMMITMENT: "commitment",
   PESERTA_AKTIF_RINGKASAN: "pesertaAktif",
+  PESERTA_AKTIF_RINGKAS: "pesertaAktif",
   PESERTA_AKTIF_RINGKA: "pesertaAktif",
   PESERTA_AKTIF: "pesertaAktif",
   WEEKLY_LEADER: "weekly",
@@ -392,29 +393,54 @@ function PesertaAktif({ rows }) {
 }
 
 /* =====================================================================
-   C. KALDIK CHECKLIST (gaya lingkaran)
+   C. KALDIK CHECKLIST (donut chart)
    ===================================================================== */
 function KaldikChecklist({ rows }) {
   const sorted = [...rows].sort((a, b) => num(a.Tanggal) - num(b.Tanggal));
+  const selesai = sorted.filter((e) => truthy(e.Done)).length;
+  const belum = sorted.filter((e) => !truthy(e.Done)).length;
+  const total = sorted.length || 1;
+  const pctDone = selesai / total;
+  const radius = 54, stroke = 12;
+  const circ = 2 * Math.PI * radius;
+  const offset = circ * (1 - pctDone);
+  const perlu = sorted.filter((e) => !truthy(e.Done));
+
   return (
-    <Section letter="C" title="Kaldik Checklist" caption="Agenda kalender akademik bulan ini">
+    <Section letter="C" title="Kaldik — Checklist" caption="Agenda kalender akademik bulan ini">
       {sorted.length === 0 && <div className="pm-empty">Belum ada agenda bulan ini.</div>}
-      <div className="pm-kal-row">
-        {sorted.map((e, i) => {
-          const done = truthy(e.Done);
-          const color = metaOf(e.Program).color;
-          return (
-            <div key={i} className={`pm-kal-item ${done ? "is-done" : ""}`}>
-              <div className="pm-kal-circle" style={{ borderColor: color, color: done ? "#fff" : color, background: done ? color : "#fff" }}>
-                <span className="pm-kal-num">{num(e.Tanggal)}</span>
-                {done && <span className="pm-kal-check">✓</span>}
-              </div>
-              <div className="pm-kal-prog" style={{ color }}>{e.Program}</div>
-              <div className="pm-kal-title">{e.Judul}</div>
+      {sorted.length > 0 && (
+        <div className="pm-donut-wrap">
+          <div className="pm-donut-left">
+            <svg width="130" height="130" viewBox="0 0 130 130">
+              <circle cx="65" cy="65" r={radius} fill="none" stroke="#E4E8F0" strokeWidth={stroke} />
+              <circle cx="65" cy="65" r={radius} fill="none" stroke="var(--teal)" strokeWidth={stroke}
+                strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round"
+                transform="rotate(-90 65 65)" style={{ transition: "stroke-dashoffset 1s ease" }} />
+            </svg>
+            <div className="pm-donut-center">
+              <span className="pm-donut-pct">{Math.round(pctDone * 100)}%</span>
             </div>
-          );
-        })}
-      </div>
+          </div>
+          <div className="pm-donut-legend">
+            <div className="pm-donut-legend__row"><span className="pm-donut-dot" style={{ background: "var(--teal)" }} />Selesai<b>{selesai}</b></div>
+            <div className="pm-donut-legend__row"><span className="pm-donut-dot" style={{ background: "var(--gold)" }} />Progress<b>0</b></div>
+            <div className="pm-donut-legend__row"><span className="pm-donut-dot" style={{ background: "var(--red)" }} />Terlambat<b>0</b></div>
+            <div className="pm-donut-legend__row"><span className="pm-donut-dot" style={{ background: "#94A3B8" }} />Belum<b>{belum}</b></div>
+          </div>
+        </div>
+      )}
+      {perlu.length > 0 && (
+        <div className="pm-donut-alert">
+          <div className="pm-donut-alert__title">Perlu perhatian:</div>
+          {perlu.slice(0, 5).map((e, i) => (
+            <div key={i} className="pm-donut-alert__item">
+              <span className="pm-chip" style={{ background: metaOf(e.Program).color }} />
+              <span>{e.Program} — {e.Judul} (tgl {num(e.Tanggal)})</span>
+            </div>
+          ))}
+        </div>
+      )}
     </Section>
   );
 }
@@ -483,28 +509,33 @@ function KaldikCalendar({ rows, periode }) {
 }
 
 /* =====================================================================
-   D. EFISIENSI CASHOUT
+   D. EFISIENSI CASHFLOW (Cash In / Cash Out / Profit)
    ===================================================================== */
 function CashoutEfisiensi({ rows }) {
   const get = (k) => num((rows.find((r) => (r.Key || "").toLowerCase() === k) || {}).Value);
   const plan = get("plan"), reality = get("reality");
-  const variance = plan - reality;
-  const eff = plan > 0 ? reality / plan : 0;
-  const over = reality > plan;
+  const profit = reality - plan;
+  const pctVsTarget = plan > 0 ? reality / plan : 0;
+  const pctVsBudget = plan > 0 ? plan / plan : 0;
+  const pctProfit = plan > 0 ? profit / plan : 0;
   return (
-    <Section letter="D" title="Efisiensi Cashout" caption="Rencana vs realisasi pengeluaran">
-      <div className="pm-grid pm-grid--3">
-        <Stat label="Cash Out Plan" value={rupiah(plan)} tone="muted" />
-        <Stat label="Cash Out Reality" value={rupiah(reality)} tone={over ? "crit" : "ok"} />
-        <Stat label="Variance" value={rupiah(Math.abs(variance))}
-          tone={over ? "crit" : "ok"} hint={over ? "Over budget" : "Hemat"} />
+    <Section letter="D" title="Efisiensi Cashflow" caption="Cash in, cash out & profit bulan ini">
+      <div className="pm-cf-row">
+        <div className="pm-cf-box pm-cf-box--blue">
+          <div className="pm-cf-box__label">CASH IN</div>
+          <div className="pm-cf-box__value">{rupiah(reality)}</div>
+          <div className="pm-cf-box__hint pm-cf-box__hint--green">▲ {pct(pctVsTarget)} vs target</div>
+        </div>
+        <div className="pm-cf-box pm-cf-box--red">
+          <div className="pm-cf-box__label">CASH OUT</div>
+          <div className="pm-cf-box__value">{rupiah(plan)}</div>
+          <div className="pm-cf-box__hint pm-cf-box__hint--red">▼ {pct(pctVsBudget)} vs budget</div>
+        </div>
       </div>
-      <div className="pm-bar pm-bar--cash">
-        <div className="pm-bar__fill" style={{
-          width: `${Math.min(100, Math.abs(eff) <= 1.5 ? eff * 100 : eff)}%`,
-          background: over ? "#E5484D" : "#0E9F8E",
-        }} />
-        <span className="pm-bar__mid">{pct(eff)} terpakai dari plan</span>
+      <div className="pm-cf-profit">
+        <div className="pm-cf-profit__label">PROFIT</div>
+        <div className="pm-cf-profit__value">{rupiah(profit)}</div>
+        <div className="pm-cf-profit__hint">▲ {pct(Math.abs(pctProfit))} vs target</div>
       </div>
     </Section>
   );
@@ -741,9 +772,11 @@ export default function App() {
             <SummaryCards data={data} />
             <PerformaTim rows={data.performaTim} />
             <PesertaAktif rows={data.pesertaAktif} />
-            <KaldikChecklist rows={data.kaldik} />
-            <CashoutEfisiensi rows={data.cashflow} />
-            <KomitmenUrgent rows={data.commitment} />
+            <div className="pm-cde-row">
+              <KaldikChecklist rows={data.kaldik} />
+              <CashoutEfisiensi rows={data.cashflow} />
+              <KomitmenUrgent rows={data.commitment} />
+            </div>
           </>
         )}
         {tab === "papan" && <PapanPerforma papan={data.papan} weekly={data.weekly} />}
@@ -867,14 +900,48 @@ const CSS = `
 .pm-stat--crit .pm-stat__value,.pm-stat--crit .pm-stat__hint{color:var(--red)}
 .pm-stat--ok .pm-stat__value,.pm-stat--ok .pm-stat__hint{color:var(--teal)}
 
-/* KALDIK CHECKLIST (lingkaran) */
-.pm-kal-row{display:flex;flex-wrap:wrap;gap:18px;padding:8px 0 2px}
-.pm-kal-item{display:flex;flex-direction:column;align-items:center;gap:6px;min-width:96px;max-width:130px}
-.pm-kal-circle{width:54px;height:54px;border-radius:50%;border:2px solid;display:grid;place-items:center;font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;font-size:18px;position:relative}
-.pm-kal-item.is-done .pm-kal-num{opacity:.95}
-.pm-kal-check{position:absolute;bottom:-3px;right:-3px;background:var(--teal);color:#fff;width:18px;height:18px;border-radius:50%;display:grid;place-items:center;font-size:11px;border:2px solid #fff}
-.pm-kal-prog{font-family:'Plus Jakarta Sans',sans-serif;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.05em}
-.pm-kal-title{font-size:12px;color:var(--ink2);text-align:center;line-height:1.3}
+/* KALDIK DONUT */
+.pm-donut-wrap{display:flex;align-items:center;gap:18px;padding:8px 0;flex-wrap:wrap}
+.pm-donut-left{position:relative;width:120px;height:120px;flex:none}
+.pm-donut-center{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+.pm-donut-pct{font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;font-size:24px;color:var(--ink)}
+.pm-donut-legend{display:flex;flex-direction:column;gap:7px;font-size:13px;flex:1;min-width:110px}
+.pm-donut-legend__row{display:flex;align-items:center;gap:8px}
+.pm-donut-legend__row b{margin-left:auto;font-weight:700;min-width:18px;text-align:right}
+.pm-donut-dot{width:10px;height:10px;border-radius:50%;flex:none}
+.pm-donut-alert{margin-top:14px;padding-top:10px;border-top:1px dashed var(--line);font-size:13px;color:#3A4663}
+.pm-donut-alert__title{font-weight:700;margin-bottom:6px;color:var(--ink)}
+.pm-donut-alert__item{display:flex;align-items:center;gap:8px;margin-bottom:3px;line-height:1.3}
+
+/* CASHFLOW CARDS */
+.pm-cf-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.pm-cf-box{border-radius:12px;padding:14px 12px;text-align:center}
+.pm-cf-box--blue{background:#DBEAFE}
+.pm-cf-box--red{background:#FEE2E2}
+.pm-cf-box__label{font-family:'Plus Jakarta Sans',sans-serif;font-weight:700;font-size:10px;letter-spacing:.06em;text-transform:uppercase;margin-bottom:4px}
+.pm-cf-box--blue .pm-cf-box__label{color:#1E3A5F}
+.pm-cf-box--red .pm-cf-box__label{color:#991B1B}
+.pm-cf-box__value{font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;font-size:18px;margin-bottom:4px;word-break:break-all}
+.pm-cf-box--blue .pm-cf-box__value{color:#1E3A5F}
+.pm-cf-box--red .pm-cf-box__value{color:#991B1B}
+.pm-cf-box__hint{font-size:11px;font-weight:600}
+.pm-cf-box__hint--green{color:#065F46}
+.pm-cf-box__hint--red{color:#991B1B}
+.pm-cf-profit{margin-top:10px;background:#FEF3C7;border-radius:12px;padding:14px 12px;text-align:center}
+.pm-cf-profit__label{font-family:'Plus Jakarta Sans',sans-serif;font-weight:700;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:#92400E;margin-bottom:2px}
+.pm-cf-profit__value{font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;font-size:22px;color:#92400E;word-break:break-all}
+.pm-cf-profit__hint{font-size:11px;font-weight:600;color:#92400E;margin-top:2px}
+
+/* C-D-E HORIZONTAL ROW */
+.pm-cde-row{display:grid;grid-template-columns:1.05fr 1fr 1.15fr;gap:14px;margin-top:18px}
+.pm-cde-row .pm-section{margin-top:0;padding:20px 18px;display:flex;flex-direction:column}
+.pm-cde-row .pm-section__title{font-size:18px}
+.pm-cde-row .pm-section__caption{font-size:12px}
+.pm-cde-row .pm-urgent{gap:7px}
+.pm-cde-row .pm-urgent__item{padding:9px 11px;gap:9px;flex-wrap:wrap}
+.pm-cde-row .pm-urgent__title{font-size:13px;flex:1;min-width:0}
+.pm-cde-row .pm-urgent__due{font-size:11px;margin-left:auto}
+.pm-cde-row .pm-urgent__flag{font-size:9px;padding:3px 7px}
 
 /* KALDIK CALENDAR */
 .pm-cal{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:#fff}
@@ -948,6 +1015,7 @@ const CSS = `
 
 @media(max-width:960px){
   .pm-summary{grid-template-columns:repeat(2,1fr)}
+  .pm-cde-row{grid-template-columns:1fr;gap:14px}
 }
 @media(max-width:720px){
   .pm-grid--3{grid-template-columns:1fr}
