@@ -249,11 +249,11 @@ function Hero({ periode, pm }) {
    PERFORMANCE APPRAISAL DETAIL (full-width, tabel + grade box)
    ===================================================================== */
 const GRADE_META = {
-  S: { bg: "linear-gradient(135deg,#FFE9A8,#F5C518)", fg: "#7A5B00", label: "Emas" },
-  A: { bg: "linear-gradient(135deg,#E8ECF2,#C7CEDC)", fg: "#3A4663", label: "Silver" },
-  B: { bg: "linear-gradient(135deg,#E3B98A,#B5762E)", fg: "#4A2E0A", label: "Bronze" },
-  C: { bg: "linear-gradient(135deg,#FFD3A6,#F59E0B)", fg: "#7A3A00", label: "Oren" },
-  D: { bg: "linear-gradient(135deg,#FCA5A5,#E5484D)", fg: "#7F1D1D", label: "Merah" },
+  S: { bg: "linear-gradient(135deg,#FFE9A8,#F5C518)", fg: "#7A5B00", },
+  A: { bg: "linear-gradient(135deg,#E8ECF2,#C7CEDC)", fg: "#3A4663", },
+  B: { bg: "linear-gradient(135deg,#E3B98A,#B5762E)", fg: "#4A2E0A", },
+  C: { bg: "linear-gradient(135deg,#FFD3A6,#F59E0B)", fg: "#7A3A00" },
+  D: { bg: "linear-gradient(135deg,#FCA5A5,#E5484D)", fg: "#7F1D1D" },
 };
 
 function AppraisalDetail({ data }) {
