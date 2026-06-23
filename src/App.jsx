@@ -122,6 +122,8 @@ function shapeData(rows) {
     periode: meta["Periode"] || "",
     pm: meta["PM"] || "",
     skorAppraisal: meta["SkorAppraisal"] || "",
+    gradeAppraisal: meta["GradeAppraisal"] || "",
+    skorRapot: meta["SkorRapot"] || "",
     performaTim: buckets.performaTim || [],
     papan: buckets.papan || [],
     kaldik: buckets.kaldik || [],
@@ -244,18 +246,65 @@ function Hero({ periode, pm }) {
 }
 
 /* =====================================================================
-   SUMMARY CARDS (di atas Performa Tim)
+   PERFORMANCE APPRAISAL DETAIL (full-width, tabel + grade box)
    ===================================================================== */
+const GRADE_META = {
+  S: { bg: "linear-gradient(135deg,#FFE9A8,#F5C518)", fg: "#7A5B00", label: "Emas" },
+  A: { bg: "linear-gradient(135deg,#E8ECF2,#C7CEDC)", fg: "#3A4663", label: "Silver" },
+  B: { bg: "linear-gradient(135deg,#E3B98A,#B5762E)", fg: "#4A2E0A", label: "Bronze" },
+  C: { bg: "linear-gradient(135deg,#FFD3A6,#F59E0B)", fg: "#7A3A00", label: "Oren" },
+  D: { bg: "linear-gradient(135deg,#FCA5A5,#E5484D)", fg: "#7F1D1D", label: "Merah" },
+};
+
+function AppraisalDetail({ data }) {
+  const rows = data.appraisal || [];
+  const grade = (data.gradeAppraisal || "").trim().toUpperCase();
+  const gm = GRADE_META[grade] || { bg: "#EEF1F6", fg: "var(--ink2)", label: "" };
+  const paScore = data.skorAppraisal !== "" ? num(data.skorAppraisal) : null;
+
+  return (
+    <Section letter="" title="Performance Appraisal" caption="Skor tertimbang berdasarkan 6 indikator KPI">
+      <div className="pm-pa-wrap">
+        <div className="pm-tablewrap pm-pa-table">
+          <table className="pm-table">
+            <thead>
+              <tr>
+                <th>Tier</th><th>Indikator</th><th>Bobot</th><th>Skor</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.length === 0 && (
+                <tr><td className="pm-empty" colSpan={4}>Belum ada data appraisal di tab 90.</td></tr>
+              )}
+              {rows.map((r, i) => (
+                <tr key={i}>
+                  <td><span className="pm-pa-tier">{r.Tier}</span></td>
+                  <td style={{ textAlign: "left" }}>{r.Indikator}</td>
+                  <td>{pct(r.Bobot)}</td>
+                  <td style={{ fontWeight: 700 }}>{pct(r.Skor)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="pm-pa-grade" style={{ background: gm.bg, color: gm.fg }}>
+          <div className="pm-pa-grade__letter">{grade || "—"}</div>
+          <div className="pm-pa-grade__score">{paScore != null ? pct(paScore) : "—"}</div>
+          {gm.label && <div className="pm-pa-grade__tag">{gm.label}</div>}
+        </div>
+      </div>
+    </Section>
+  );
+}
+
+
 function SummaryCards({ data }) {
   const programs = (data.performaTim || []).filter((r) => r.Program && (r.Status || "").trim() !== "-");
 
-  // Performance Appraisal: skor langsung dari H4 tab 90 (sudah dihitung di sheet)
-  const paScoreRaw = num(data.skorAppraisal);
-  const paScore = data.skorAppraisal !== "" ? paScoreRaw : null;
-
-  // Kaldik
-  const kaldikDone = (data.kaldik || []).filter((e) => truthy(e.Done)).length;
-  const kaldikTotal = (data.kaldik || []).length;
+  // Skor Rapot dari M15 tab 90
+  const rapotRaw = num(data.skorRapot);
+  const rapotScore = data.skorRapot !== "" ? rapotRaw : null;
 
   // SIS rata-rata
   const sisVals = programs.map((r) => num(r.SIS)).filter((v) => v > 0);
@@ -263,10 +312,8 @@ function SummaryCards({ data }) {
 
   const cards = [
     { label: "Program Dimonitor", value: programs.length, sub: "program aktif", tone: "ink" },
-    { label: "Skor Performance Appraisal", value: paScore != null ? pct(paScore) : "—",
-      sub: paScore != null ? "skor tertimbang dari tab 90" : "H4 belum terisi di sheet 90", tone: "violet" },
-    { label: "Kaldik", value: kaldikTotal ? `${kaldikDone}/${kaldikTotal}` : "—",
-      sub: kaldikTotal ? `${pct(kaldikDone / kaldikTotal)} terlaksana` : "belum ada agenda", tone: "teal" },
+    { label: "Skor Rapot", value: rapotScore != null ? pct(rapotScore) : "—",
+      sub: rapotScore != null ? "dari tab 90, sel M15" : "M15 belum terisi di sheet 90", tone: "teal" },
     { label: "SIS Rata-rata", value: sisAvg ? pct(sisAvg) : "—", sub: "kepatuhan WHT", tone: "gold" },
   ];
 
@@ -783,6 +830,7 @@ export default function App() {
       <main className="pm-main">
         {tab === "dashboard" && (
           <>
+            <AppraisalDetail data={data} />
             <SummaryCards data={data} />
             <PerformaTim rows={data.performaTim} />
             <PesertaAktif rows={data.pesertaAktif} />
@@ -842,8 +890,20 @@ const CSS = `
 
 .pm-main{max-width:1180px;margin:0 auto;padding:8px 24px 10px}
 
+/* PERFORMANCE APPRAISAL DETAIL */
+.pm-pa-wrap{display:grid;grid-template-columns:1fr 280px;gap:18px;align-items:stretch}
+.pm-pa-table table{min-width:0}
+.pm-pa-table th{background:#F7F9FC}
+.pm-pa-tier{display:inline-block;font-family:'Plus Jakarta Sans',sans-serif;font-weight:700;font-size:11px;
+  letter-spacing:.04em;padding:3px 10px;border-radius:7px;background:#EEF1F6;color:var(--ink2)}
+.pm-pa-grade{border-radius:16px;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:20px;text-align:center;min-height:100%}
+.pm-pa-grade__letter{font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;font-size:64px;line-height:1}
+.pm-pa-grade__score{font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;font-size:30px;margin-top:6px;letter-spacing:-.02em}
+.pm-pa-grade__tag{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin-top:8px;opacity:.75}
+
 /* SUMMARY CARDS */
-.pm-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:18px}
+.pm-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:18px}
 .pm-summary__card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px 20px;position:relative;overflow:hidden}
 .pm-summary__card::before{content:"";position:absolute;top:0;left:0;width:5px;height:100%}
 .pm-summary__card--ink::before{background:var(--ink)}
@@ -1030,6 +1090,7 @@ const CSS = `
 @media(max-width:960px){
   .pm-summary{grid-template-columns:repeat(2,1fr)}
   .pm-cde-row{grid-template-columns:1fr;gap:14px}
+  .pm-pa-wrap{grid-template-columns:1fr}
 }
 @media(max-width:720px){
   .pm-grid--3{grid-template-columns:1fr}
