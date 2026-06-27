@@ -234,7 +234,7 @@ function Hero({ periode, pm }) {
       <div className="pm-hero__scrim" />
       <div className="pm-hero__inner">
         <span className="pm-eyebrow">Performance Management · MCU</span>
-        <h1 className="pm-hero__title">Scoreboard Program Manager</h1>
+        <h1 className="pm-hero__title">Scoreboard Project Manager</h1>
         <div className="pm-hero__meta">
           <span><b>{periode || "—"}</b></span>
           <span className="pm-dot" />
