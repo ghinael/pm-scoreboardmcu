@@ -125,15 +125,17 @@ Commissioners
 
 ### Dashboard Overview
 
-_Add screenshot here_
+![Dashboard Overview](./assets/01.png)
+![Dashboard Overview](./assets/02.png)
+![Dashboard Overview](./assets/03.png)
 
 ### Weekly Performance Board
 
-_Add screenshot here_
+![Performance Board](./assets/04.png)
 
 ### Academic Calendar
 
-_Add screenshot here_
+![Academic Calendar](./assets/05.png)
 
 ---
 
