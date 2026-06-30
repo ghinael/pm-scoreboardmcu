@@ -1,4 +1,4 @@
-# PM Scoreboard — MCU Hub
+# MCU Hub — Project Management Dashboard
 
 ![React](https://img.shields.io/badge/React-19-blue)
 ![Vite](https://img.shields.io/badge/Vite-7-purple)
@@ -75,18 +75,19 @@ I was responsible for the entire project lifecycle:
 - Connected live Google Sheets data
 - Deployed the application using Vercel
 - Tested and refined the dashboard based on operational needs
+- Standardized operational workflows across multiple existing systems
 
 ---
 
 ## 🚀 Business Impact
 
-This dashboard helped simplify operational monitoring by:
+The implementation of this dashboard improved daily operational monitoring by:
 
-- Centralizing information from multiple spreadsheets
-- Improving visibility across six education programs
-- Reducing manual review during weekly meetings
-- Supporting faster operational decision-making
-- Providing executives with a clear overview of organizational performance
+- Centralizing information from multiple spreadsheets into a single dashboard.
+- Providing executives with real-time visibility across six education programs.
+- Simplifying weekly performance reviews.
+- Supporting faster decision-making through consolidated operational data.
+- Standardizing operational reporting across multiple programs.
 
 ---
 
@@ -95,6 +96,7 @@ This dashboard helped simplify operational monitoring by:
 - React
 - Vite
 - Google Sheets
+- Google Publish-to-Web
 - CSV Data Integration
 - Vercel
 
@@ -102,23 +104,23 @@ This dashboard helped simplify operational monitoring by:
 
 ## 🏗 System Architecture
 
+```text
 Marketing Scoreboards
-
-↓ (Google Sheets)
-
+        │
+        ▼
+Google Sheets
+        │
+        ▼
 Published CSV
-
-↓
+        │
+        ▼
 React Dashboard
-
-↓
-
-Project Manager
-
+        │
+        ▼
+Project Managers
 CEO
-
 Commissioners
-
+```
 ---
 
 ## 📷 Screenshots
@@ -170,11 +172,17 @@ To obtain the CSV URL:
 ### Run Locally
 
 ```bash
-git init
-git add .
-git commit -m "PM Scoreboard dashboard"
-git remote add origin <URL_REPO_GITHUB_KAMU>
-git push -u origin main
+Configure Google Sheets
+
+Push to GitHub
+
+Deploy to Vercel
+
+Update Data
+
+Update Features
+
+Run Locally
 ```
 
 Kalau belum punya repo, bikin dulu di github.com/new (boleh private atau public).
